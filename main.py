@@ -1,11 +1,7 @@
 from scraper import scrape_trustpilot_reviews
 from groq import Groq
-from groq.resources import embeddings
-import os
 import pandas as pd
 import time
-from collections import Counter
-import re
 from collections import defaultdict
 from typing import List, Tuple, Any
 from sentence_transformers import SentenceTransformer, util
@@ -16,13 +12,7 @@ reviews = scrape_trustpilot_reviews(base_url)
 
 
 def export_reviews_to_excel(reviews: list[dict], filename: str = "trustpilot_reviews.xlsx"):
-    """
-    Exportiert eine Liste von Review-Dictionaries in eine Excel-Datei.
 
-    Args:
-        reviews (list of dict): Die Bewertungen im Format [{'Date': ..., 'Author': ..., ...}, ...]
-        filename (str): Der Name der Excel-Datei (Standard: trustpilot_reviews.xlsx)
-    """
     df = pd.DataFrame(reviews)
 
     columns_order = ['Date', 'Author', 'Location', 'Rating', 'Heading', 'Body']
@@ -32,16 +22,10 @@ def export_reviews_to_excel(reviews: list[dict], filename: str = "trustpilot_rev
     print(f"Export erfolgreich: {filename}")
 
 
-
-
-
-
-
 # Groq Setup
 api_key = 'API_KEY'
 client = Groq(api_key=api_key)
 
-# Sentence Transformer Modell
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 def chunk_reviews(reviews: List[dict], batch_size: int = 5):
@@ -127,9 +111,7 @@ def count_category_results(all_reviews: list[dict], categories: list[str]) -> di
 
 
 def analyze_all_reviews_structured(reviews: List[dict]) -> list[dict]:
-    """
-    Gibt eine Liste von Dicts zurück mit Klassifikation pro Review.
-    """
+
     count = 0
     parsed_reviews = []
     for review in reviews:
@@ -145,9 +127,7 @@ def analyze_all_reviews_structured(reviews: List[dict]) -> list[dict]:
     return parsed_reviews
 
 def export_category_summary_to_excel(counts: dict, filename: str = "category_summary.xlsx"):
-    """
-    Exportiert die Kategoriezählungen in eine Excel-Datei.
-    """
+
     data = []
     for category, value_counts in counts.items():
         row = {
