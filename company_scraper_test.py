@@ -116,6 +116,6 @@ def trustpilot_score(url='https://de.trustpilot.com/review/finn.com', number_rev
 
 
 time_intervall = "?date=last6months"
-url = "https://de.trustpilot.com/review/psd-rhein-ruhr.de"
+url = "https://de.trustpilot.com/review/www.amazon.de"
 #trustpilot_score(url=url)
 trustpilot_trend(url=url+time_intervall)
