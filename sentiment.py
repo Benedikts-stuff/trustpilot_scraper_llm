@@ -38,6 +38,7 @@ aspects = {
 import pandas as pd
 import re
 import spacy
+from company_scraper_test import write_to_excel
 
 nlp = spacy.load("de_core_news_sm")
 
@@ -84,7 +85,7 @@ pivot = summary.pivot(index="Aspect", columns="Sentiment", values="Anzahl").rese
 pivot.insert(1, '', '')  # Leerspalte
 pivot = pivot[["Aspect", "", "pos", "neg"]]
 print(pivot)
-pivot.to_excel("aspekt_sentiment_summary_formatiert.xlsx", index=False)
+write_to_excel("aspekt_sentiment_summary_formatiert.xlsx","Sheet1", pivot)
 # Zusammenführen
 export_cols = base_cols + aspect_cols
 

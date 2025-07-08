@@ -86,18 +86,18 @@ def trustpilot_trend(url='https://de.trustpilot.com/review/ergo-reiseversicherun
     summary_transposed = summary_with_empty
     # 8. Zusammenfassungsdatei schreiben oder ersetzen
     summary_file = output_file
-    write_to_excel(summary_file, summary_file, summary_transposed)
+    write_to_excel(summary_file, "Sheet1", summary_transposed)
 
     trigger_thinkcell_update('C:\\Users\\beng\\PycharmProjects\\trustpilot_scraper_llm\\trustpilot_summary.xlsx')
 
 def trigger_thinkcell_update(excel_path):
     excel = win32.gencache.EnsureDispatch('Excel.Application')
-    excel.Visible = True  # Nicht anzeigen
+    excel.Visible = True
 
-    workbook = excel.Workbooks.Open(excel_path)
+    excel.Workbooks.Open(excel_path)
     #time.sleep(30)
-    #workbook.Save()        # Speichern (triggert Update)
-    #workbook.Close(False)  # Schließen ohne weitere Änderungen
+    #workbook.Save()
+    #workbook.Close(False)
 
     #excel.Quit()
 
@@ -111,11 +111,11 @@ def trustpilot_score(url='https://de.trustpilot.com/review/finn.com', number_rev
 
     stars_absolute_df = pd.DataFrame(data, columns=["Sterne", " ", "Anzahl"])
 
-    write_to_excel(number_reviews_summary, number_reviews_summary, stars_absolute_df)
+    write_to_excel(number_reviews_summary, "Sheet1", stars_absolute_df)
     trigger_thinkcell_update('C:\\Users\\beng\\PycharmProjects\\trustpilot_scraper_llm\\trustpilot_general_score.xlsx')
 
 
 time_intervall = "?date=last6months"
-url = "https://de.trustpilot.com/review/www.amazon.de"
+url = "https://de.trustpilot.com/review/www.deutsche-familienversicherung.de"
 #trustpilot_score(url=url)
-trustpilot_trend(url=url+time_intervall)
+#trustpilot_trend(url=url+time_intervall)
