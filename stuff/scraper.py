@@ -1,7 +1,6 @@
 # trustpilot_scraper/scraper.py
 import random
 
-import pandas
 import requests
 from bs4 import BeautifulSoup
 import json

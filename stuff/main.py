@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import List, Tuple, Any
 from sentence_transformers import SentenceTransformer, util
 
-base_url = 'https://de.trustpilot.com/review/www.energieag.at'
+base_url = 'https://www.trustpilot.com/review/hermalabels.com.au'
 
 reviews = scrape_trustpilot_reviews(base_url)
 
@@ -23,7 +23,7 @@ def export_reviews_to_excel(reviews: list[dict], filename: str = "trustpilot_rev
 
 
 # Groq Setup
-api_key = 'API_KEY'
+api_key = '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'
 client = Groq(api_key=api_key)
 
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -143,7 +143,7 @@ def export_category_summary_to_excel(counts: dict, filename: str = "category_sum
     print(f" Excel-Datei gespeichert unter: {filename}")
 
 
-parsed_reviews = analyze_all_reviews_structured(reviews)
-category_counts = count_category_results(parsed_reviews, list(CATEGORIES_WITH_DEFS.keys()))
-export_category_summary_to_excel(category_counts)
+#parsed_reviews = analyze_all_reviews_structured(reviews)
+#category_counts = count_category_results(parsed_reviews, list(CATEGORIES_WITH_DEFS.keys()))
+#export_category_summary_to_excel(category_counts)
 

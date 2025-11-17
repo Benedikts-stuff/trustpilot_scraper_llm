@@ -6,7 +6,6 @@ from openpyxl import load_workbook
 from openpyxl.styles import numbers
 from datetime import datetime
 from pandas.tseries.offsets import MonthEnd
-import win32com.client as win32
 
 def write_to_excel(filepath, sheet_name, df):
     from openpyxl import load_workbook
@@ -31,7 +30,7 @@ def write_to_excel(filepath, sheet_name, df):
         with pd.ExcelWriter(filepath, engine='openpyxl', mode='w') as writer:
             df.to_excel(writer, sheet_name=sheet_name, index=False)
 
-def trustpilot_trend(url='https://de.trustpilot.com/review/ergo-reiseversicherung.de?date=last6months', output_file="trustpilot_summary.xlsx" ):
+def trustpilot_trend(url='https://www.trustpilot.com/review/hermalabels.com.au', output_file="trustpilot_summary_Herma.xlsx" ):
     # 1. Trustpilot Reviews scrapen
     base_url = url
     reviews = scrape_trustpilot_reviews(base_url)
@@ -116,6 +115,6 @@ def trustpilot_score(url='https://de.trustpilot.com/review/finn.com', number_rev
 
 
 time_intervall = "?date=last6months"
-url = "https://de.trustpilot.com/review/www.deutsche-familienversicherung.de"
+url = "https://www.trustpilot.com/review/hermalabels.com.au"
 #trustpilot_score(url=url)
 #trustpilot_trend(url=url+time_intervall)

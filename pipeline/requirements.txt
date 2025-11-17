@@ -1,0 +1,17 @@
+# requirements.txt
+streamlit
+pandas
+openpyxl
+requests
+beautifulsoup4
+transformers
+torch
+groq
+spacy==3.7.4  # Behalten wir bei, das war ein wichtiger Fix
+nltk
+matplotlib
+wordcloud
+seaborn
+
+# NEU: Für Kununu-Scraper (Punkt 2)
+selenium
