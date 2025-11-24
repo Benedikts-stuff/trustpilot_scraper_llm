@@ -11,7 +11,6 @@ sns.set_theme(style="whitegrid")
 
 def create_wordcloud(text_series, title):
     """Erstellt eine Wordcloud aus einer Pandas-Textserie."""
-    # (Dein bestehender Code)
     from nltk.corpus import stopwords
     import nltk
     try:
@@ -20,7 +19,17 @@ def create_wordcloud(text_series, title):
         nltk.download('stopwords')
         stop_words = set(stopwords.words('german'))
 
-    full_text = " ".join(text_series.dropna().astype(str))
+    # Füge englische Stopwords hinzu für Trustpilot
+    try:
+        stop_words.update(set(stopwords.words('english')))
+    except:
+        pass
+
+    # Alles zu Strings, NaNs raus
+    text_data = text_series.dropna().astype(str)
+    if text_data.empty: return None
+
+    full_text = " ".join(text_data)
 
     filtered_words = " ".join([
         word for word in full_text.split()
@@ -30,7 +39,7 @@ def create_wordcloud(text_series, title):
     if not filtered_words:
         return None
 
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(filtered_words)
+    wordcloud = WordCloud(width=800, height=400, background_color='white', colormap='viridis').generate(filtered_words)
 
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.imshow(wordcloud, interpolation='bilinear')
@@ -46,8 +55,12 @@ def plot_llama_distribution(df):
     # Definierte Reihenfolge erzwingen
     categories = ["positiv", "neutral", "negativ", "Verbesserungsvorschlag"]
 
-    # Zählen und Reindexieren (damit 0-Werte auftauchen)
-    counts = df['LLaMA_Kategorie'].value_counts().reindex(categories, fill_value=0)
+    # Normalisieren der Daten (Case insensitiv)
+    s = df['LLaMA_Kategorie'].astype(str).str.lower()
+    # Mapping auf saubere Kategorien
+    s = s.replace({"positive": "positiv", "negative": "negativ"})
+
+    counts = s.value_counts().reindex([c.lower() for c in categories], fill_value=0)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     sns.barplot(x=counts.index, y=counts.values, palette="viridis", ax=ax)
@@ -58,28 +71,18 @@ def plot_llama_distribution(df):
     return fig
 
 
-def plot_sentiment_timeline(df):
-    """Zeigt den Verlauf des BERT-Sentiments über die Zeit."""
-    if 'Date' not in df.columns or 'BERT_Score' not in df.columns: return None
+def plot_bert_distribution(df):
+    """Zeigt BERT-Sentiment mit Seaborn an."""
+    if 'BERT_Sentiment' not in df.columns: return None
 
-    # Kopie machen und Datum konvertieren
-    df_plot = df.copy()
-    df_plot['Date'] = pd.to_datetime(df_plot['Date'], errors='coerce')
-    df_plot = df_plot.dropna(subset=['Date']).sort_values('Date')
+    categories = ["positive", "neutral", "negative"]
+    counts = df['BERT_Sentiment'].value_counts().reindex(categories, fill_value=0)
 
-    if df_plot.empty: return None
+    fig, ax = plt.subplots(figsize=(6, 5))
+    sns.barplot(x=counts.index, y=counts.values, palette="viridis", ax=ax)
 
-    # Wir glätten die Kurve (Rolling Average über 7 Einträge), damit man Trends sieht
-    df_plot['Rolling_Score'] = df_plot['BERT_Score'].rolling(window=5, min_periods=1).mean()
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    sns.lineplot(data=df_plot, x='Date', y='Rolling_Score', marker="o", ax=ax, color="tab:blue",
-                 label="Sentiment Trend")
-
-    # Referenzlinie bei 0
-    ax.axhline(0, color='gray', linestyle='--', linewidth=0.8)
-    ax.set_title("Sentiment-Entwicklung über die Zeit")
-    ax.set_ylabel("Sentiment Score (negativ < 0 < positiv)")
+    ax.set_title("BERT Sentiment (KI)")
+    ax.set_ylabel("Anzahl Reviews")
     return fig
 
 
@@ -98,17 +101,14 @@ def plot_star_distribution(df):
 
 def plot_aspect_heatmap(df):
     """Erstellt eine Übersicht über alle Aspekte (Positiv vs Negativ)."""
-    # Wir suchen alle Spalten, die auf _pos oder _neg enden
     pos_cols = [c for c in df.columns if c.endswith('_pos')]
     neg_cols = [c for c in df.columns if c.endswith('_neg')]
 
     if not pos_cols: return None
 
-    # Summen berechnen
     pos_sums = df[pos_cols].sum()
     neg_sums = df[neg_cols].sum()
 
-    # Namen bereinigen (z.B. "Freundlichkeit_pos" -> "Freundlichkeit")
     aspect_names = [c.replace('_pos', '') for c in pos_cols]
 
     data = {
@@ -116,48 +116,51 @@ def plot_aspect_heatmap(df):
         'Negativ': neg_sums.values
     }
     df_aspects = pd.DataFrame(data, index=aspect_names)
-
-    # Sortieren nach den meisten Nennungen insgesamt
     df_aspects['Total'] = df_aspects['Positiv'] + df_aspects['Negativ']
     df_aspects = df_aspects.sort_values('Total', ascending=False).drop(columns=['Total'])
 
     if df_aspects.empty: return None
 
     fig, ax = plt.subplots(figsize=(8, len(aspect_names) * 0.8 + 2))
-
-    # Heatmap zeichnen
     sns.heatmap(df_aspects, annot=True, fmt="g", cmap="RdYlGn", center=0, ax=ax)
     ax.set_title("Aspekt-Analyse: Positiv vs. Negativ Nennungen")
     return fig
 
 
-def plot_bert_distribution(df):
-    """Zeigt BERT-Sentiment mit Seaborn an."""
-    if 'BERT_Sentiment' not in df.columns: return None
+# --- NEUE FUNKTIONEN FÜR ADVANCED STATS ---
 
-    # Wir erzwingen diese Reihenfolge, damit auch 0-Werte angezeigt werden
-    categories = ["positive", "neutral", "negative"]
-    counts = df['BERT_Sentiment'].value_counts().reindex(categories, fill_value=0)
+def plot_correlation_heatmap(df):
+    """Zeigt Korrelationen zwischen Sternen, Wortlänge und Sentiment-Scores."""
+    cols_to_corr = []
+
+    # Textlänge berechnen falls möglich
+    df_calc = df.copy()
+    if 'Body' in df_calc.columns:
+        df_calc['Text_Length'] = df_calc['Body'].astype(str).str.len()
+        cols_to_corr.append('Text_Length')
+
+    if 'Rating' in df_calc.columns: cols_to_corr.append('Rating')
+    if 'BERT_Score' in df_calc.columns: cols_to_corr.append('BERT_Score')
+    if 'Wortliste_Score' in df_calc.columns: cols_to_corr.append('Wortliste_Score')
+
+    if len(cols_to_corr) < 2: return None
+
+    corr = df_calc[cols_to_corr].corr()
 
     fig, ax = plt.subplots(figsize=(6, 5))
-    # palette="viridis" ist der gleiche Farbstil wie bei LLaMA
-    sns.barplot(x=counts.index, y=counts.values, palette="viridis", ax=ax)
-
-    ax.set_title("BERT Sentiment (KI)")
-    ax.set_ylabel("Anzahl Reviews")
+    sns.heatmap(corr, annot=True, cmap="coolwarm", vmin=-1, vmax=1, ax=ax)
+    ax.set_title("Korrelation (Zusammenhänge)")
     return fig
 
 
-def plot_sentiws_distribution(df):
-    """Zeigt SentiWS-Sentiment mit Seaborn an."""
-    if 'Wortliste_Sentiment' not in df.columns: return None
+def plot_location_bar(df):
+    """Zeigt Verteilung nach Ländern (wenn Location vorhanden)."""
+    if 'Location' not in df.columns: return None
 
-    categories = ["positive", "neutral", "negative"]
-    counts = df['Wortliste_Sentiment'].value_counts().reindex(categories, fill_value=0)
+    counts = df['Location'].value_counts().head(10)  # Top 10
+    if counts.empty: return None
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    sns.barplot(x=counts.index, y=counts.values, palette="viridis", ax=ax)
-
-    ax.set_title("SentiWS Sentiment (Wortliste)")
-    ax.set_ylabel("Anzahl Reviews")
+    fig, ax = plt.subplots(figsize=(6, 4))
+    sns.barplot(x=counts.index, y=counts.values, palette="rocket", ax=ax)
+    ax.set_title("Herkunft der Bewertungen (Top 10)")
     return fig
