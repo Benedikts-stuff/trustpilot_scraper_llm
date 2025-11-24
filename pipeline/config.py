@@ -2,10 +2,10 @@
 import os
 
 # API-Keys
-GROQ_API_KEY ='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'
+GROQ_API_KEY =os.getenv("GROQ_API_KEY")
 
 # Sentiment-Wortlisten (aus word_list_sentiment.py)
-SENTIWS_POS_PATH = "SentiWS_v2.0_Positive.txt"
+SENTIWS_POS_PATH = "SentiWS_v2.0_Positive.txt"ß
 SENTIWS_NEG_PATH = "SentiWS_v2.0_Negative.txt"
 STOPWORDS_PATH = "german_stopwords_full.txt"
 
