@@ -1,11 +1,8 @@
-# reporting.py
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from wordcloud import WordCloud
-from io import BytesIO
 
-# Setze den Style für alle Plots
 sns.set_theme(style="whitegrid")
 
 
@@ -19,13 +16,11 @@ def create_wordcloud(text_series, title):
         nltk.download('stopwords')
         stop_words = set(stopwords.words('german'))
 
-    # Füge englische Stopwords hinzu für Trustpilot
     try:
         stop_words.update(set(stopwords.words('english')))
     except:
         pass
 
-    # Alles zu Strings, NaNs raus
     text_data = text_series.dropna().astype(str)
     if text_data.empty: return None
 
@@ -52,12 +47,9 @@ def plot_llama_distribution(df):
     """Zeigt LLaMA-Kategorien an und erzwingt alle 4 Labels."""
     if 'LLaMA_Kategorie' not in df.columns: return None
 
-    # Definierte Reihenfolge erzwingen
     categories = ["positiv", "neutral", "negativ", "Verbesserungsvorschlag"]
 
-    # Normalisieren der Daten (Case insensitiv)
     s = df['LLaMA_Kategorie'].astype(str).str.lower()
-    # Mapping auf saubere Kategorien
     s = s.replace({"positive": "positiv", "negative": "negativ"})
 
     counts = s.value_counts().reindex([c.lower() for c in categories], fill_value=0)
@@ -127,13 +119,11 @@ def plot_aspect_heatmap(df):
     return fig
 
 
-# --- NEUE FUNKTIONEN FÜR ADVANCED STATS ---
 
 def plot_correlation_heatmap(df):
     """Zeigt Korrelationen zwischen Sternen, Wortlänge und Sentiment-Scores."""
     cols_to_corr = []
 
-    # Textlänge berechnen falls möglich
     df_calc = df.copy()
     if 'Body' in df_calc.columns:
         df_calc['Text_Length'] = df_calc['Body'].astype(str).str.len()
@@ -150,17 +140,4 @@ def plot_correlation_heatmap(df):
     fig, ax = plt.subplots(figsize=(6, 5))
     sns.heatmap(corr, annot=True, cmap="coolwarm", vmin=-1, vmax=1, ax=ax)
     ax.set_title("Korrelation (Zusammenhänge)")
-    return fig
-
-
-def plot_location_bar(df):
-    """Zeigt Verteilung nach Ländern (wenn Location vorhanden)."""
-    if 'Location' not in df.columns: return None
-
-    counts = df['Location'].value_counts().head(10)  # Top 10
-    if counts.empty: return None
-
-    fig, ax = plt.subplots(figsize=(6, 4))
-    sns.barplot(x=counts.index, y=counts.values, palette="rocket", ax=ax)
-    ax.set_title("Herkunft der Bewertungen (Top 10)")
     return fig

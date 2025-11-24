@@ -7,21 +7,16 @@ import pandas as pd
 import re
 import random
 
-# --- NEUE IMPORTE FÜR SELENIUM (KUNUNU) ---
 from selenium import webdriver
-import platform
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 
-import platform # Um Windows/Mac zu erkennen
-import os       # Um absolute Pfade zu bauen
+import platform
+import os
 
-
-# -------------------------------------------
 
 # ==============================================================
 # 1. TRUSTPILOT SCRAPER (mit max_pages Limit)
@@ -51,7 +46,6 @@ def scrape_trustpilot_reviews(base_url: str, max_pages: int = 1000):
     page_number = 1
 
     while True:
-        # HIER IST DEIN PUNKT 1:
         if page_number > max_pages:
             print(f"Scraping-Limit von {max_pages} Seiten erreicht. Stoppe.")
             break
@@ -88,7 +82,7 @@ def scrape_trustpilot_reviews(base_url: str, max_pages: int = 1000):
 
 
 # ==============================================================
-# 2. KUNUNU SCRAPER (BASIEREND AUF DEINEN SKRIPTEN)
+# 2. KUNUNU SCRAPER
 # ==============================================================
 
 def _setup_selenium_driver():
@@ -103,16 +97,13 @@ def _setup_selenium_driver():
     opts.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-    # --- ROBUSTE PFAD-LOGIK ---
     try:
-        # Finde den absoluten Pfad zu dem Ordner, in dem DIESES Skript (scraper.py) liegt
         script_dir = os.path.dirname(os.path.abspath(__file__))
 
         local_driver_name = "chromedriver"
         if platform.system() == "Windows":
             local_driver_name = "chromedriver.exe"
 
-        # Baue den absoluten Pfad zur Treiber-Datei (z.B. /Users/benedikt/Projekt/chromedriver)
         local_driver_path = os.path.join(script_dir, local_driver_name)
 
         print(f"Suche nach Treiber unter absolutem Pfad: {local_driver_path}")
@@ -125,7 +116,6 @@ def _setup_selenium_driver():
             print("------------------------")
             return None
 
-        # Verwende den absoluten Pfad
         service = Service(executable_path=local_driver_path)
         driver = webdriver.Chrome(service=service, options=opts)
         print(f"WebDriver initialisiert (von lokaler Datei: {local_driver_path}).")
@@ -160,39 +150,48 @@ def _hide_consent_banner(driver):
         }, 500);
         """)
     except Exception:
-        pass  # Ignoriere Fehler hier
+        pass
 
 
-# --- Kununu Kommentare (Logik aus test.py) ---
 
 def _expand_all_reviews(driver, max_pages_to_click: int):
     """Klickt 'Mehr anzeigen' für Review-Listen (DEIN PUNKT 1)."""
     clicks = 0
+    wait = WebDriverWait(driver, 10)
+
     while clicks < max_pages_to_click:
         try:
-            # Warte, bis der Button da UND klickbar ist
-            wait = WebDriverWait(driver, 10)
-            btn = wait.until(EC.element_to_be_clickable((By.ID, "reviews-read-more-cta")))
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1.5)
 
-            if not btn.is_displayed():
-                break  # Button ist da, aber unsichtbar
+            btn = wait.until(EC.presence_of_element_located((By.ID, "reviews-read-more-cta")))
 
             driver.execute_script("arguments[0].scrollIntoView({block:'center'});", btn)
-            time.sleep(0.5)
-            btn.click()
-            print(f"Kununu 'Mehr anzeigen' geklickt ({clicks + 1}/{max_pages_to_click})")
+            time.sleep(1)
 
-            # Warte, bis der *alte* Button verschwunden/verändert ist
-            wait.until(EC.staleness_of(btn))
-            time.sleep(random.randint(2, 4))
+            btn_clickable = wait.until(EC.element_to_be_clickable((By.ID, "reviews-read-more-cta")))
+            try:
+                btn_clickable.click()
+            except:
+                driver.execute_script("arguments[0].click();", btn_clickable)
+
+            print(f"Kununu 'Mehr anzeigen' geklickt ({clicks + 1}/{max_pages_to_click})")
             clicks += 1
 
+            try:
+                wait.until(EC.staleness_of(btn))
+            except TimeoutException:
+                pass
+
+            time.sleep(random.randint(3, 5))
+
         except (TimeoutException, StaleElementReferenceException):
-            print("Kein 'Mehr anzeigen'-Button mehr gefunden oder Timeout. Fertig.")
+            print("Kein 'Mehr anzeigen'-Button mehr gefunden oder Ende erreicht.")
             break
         except Exception as e:
-            print(f"Fehler beim Klicken: {e}. Breche ab.")
-            break
+            print(f"Fehler im Loop: {e}. Versuche weiter...")
+            time.sleep(2)
+            continue
 
 
 def _parse_review_cards(driver):
@@ -203,16 +202,15 @@ def _parse_review_cards(driver):
 
     for card in cards:
         driver.execute_script("arguments[0].scrollIntoView({block:'center'});", card)
-        time.sleep(0.1)  # Warten auf Lazy-Loading
+        time.sleep(0.1)
 
-        # "Alle anzeigen" *innerhalb* einer Karte klicken
         try:
             show_all = card.find_element(By.XPATH, ".//button[normalize-space()='Alle anzeigen']")
             if show_all.is_displayed():
                 driver.execute_script("arguments[0].click();", show_all)
                 time.sleep(0.1)
         except Exception:
-            pass  # Kein "Alle anzeigen"-Button
+            pass
 
         try:
             dt = card.find_element(By.CSS_SELECTOR, ".p-tiny-regular.text-dark-63").get_attribute("datetime") or ""
@@ -244,10 +242,10 @@ def _parse_review_cards(driver):
                     star_raw = fb.find_element(By.XPATH, ".//*[self::span or self::*][@data-score]").get_attribute(
                         "data-score")
                     score = float(star_raw.replace(",", "."))
-                    title_orig = fb.find_element(By.CSS_SELECTOR, "h4").text.strip()  # Originaltitel holen
+                    title_orig = fb.find_element(By.CSS_SELECTOR, "h4").text.strip()
                     categories[title_orig] = {"score": score, "text": text}
                 except Exception:
-                    pass  # Kein Bewertungs-Faktor
+                    pass
 
         reviews.append({
             "Date": dt,
@@ -279,7 +277,6 @@ def scrape_kununu_comments(url: str, max_pages_to_click: int = 50):
     return reviews
 
 
-# --- Kununu Gehälter (Logik aus kununu_salary.py) ---
 
 def scrape_kununu_salary(url: str, max_pages_to_click: int = 50):
     """Hauptfunktion zum Scrapen von Kununu-Gehältern."""
