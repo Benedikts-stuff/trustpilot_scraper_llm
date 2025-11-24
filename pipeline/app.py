@@ -1,24 +1,24 @@
-# app.py
+# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
-from io import BytesIO
+import altair as alt
 import time
+import numpy as np
+from datetime import datetime
 
-# Importiere unsere Module
+# Importiere deine lokalen Module
 import scraper
 import analysis
 import reporting
 
-# --- Seiten-Konfiguration (Wide Mode ist wichtig für diesen Look) ---
+# --- PAGE CONFIG ---
 st.set_page_config(
-    page_title="Review Analytics Dashboard",
+    page_title="Review Peer Analysis",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="expanded"
 )
 
-# --- CSS HACK FÜR DEN STOCK-MARKET LOOK ---
-# Das entfernt etwas Padding oben, damit es "knackiger" aussieht
+# --- CSS VOM STOCK PEER TEMPLATE ---
 st.markdown("""
         <style>
                .block-container {
@@ -30,259 +30,379 @@ st.markdown("""
         </style>
         """, unsafe_allow_html=True)
 
-# --- INITIALISIERUNG STATE ---
-if 'raw_df' not in st.session_state: st.session_state.raw_df = None
-if 'results_df' not in st.session_state: st.session_state.results_df = None
-if 'text_column' not in st.session_state: st.session_state.text_column = "Body"
+st.title("📊 Review & Sentiment Peer Analysis")
+st.markdown("Vergleiche Arbeitgeber-Bewertungen und Stimmungen.")
+
+# --- STATE MANAGEMENT ---
+if "sources_db" not in st.session_state:
+    st.session_state.sources_db = [
+        {"name": "Beispiel Trustpilot", "url": "https://www.trustpilot.com/review/www.sap.com",
+         "type": "Trustpilot (Kommentare)"},
+        {"name": "Beispiel Kununu", "url": "https://www.kununu.com/de/telekom", "type": "Kununu (Kommentare)"}
+    ]
+
+if "analysis_results" not in st.session_state:
+    st.session_state.analysis_results = {}
+
+if "selected_view_sources" not in st.session_state:
+    st.session_state.selected_view_sources = []
 
 
-# --- HELPER: KPI BERECHNUNG ---
-def calculate_kpis(df):
-    kpis = {}
-    # 1. Total Reviews
-    kpis["count"] = len(df)
+# --- HELPER: SCORE BERECHNUNG ---
+def prepare_time_series(df, metric_type):
+    """
+    Wandelt den DataFrame in eine Zeitreihe mit einem einzigen numerischen Wert um,
+    basierend auf der gewählten Metrik.
+    """
+    df = df.copy()
 
-    # 2. Average Rating (Falls vorhanden)
-    if "Rating" in df.columns and pd.api.types.is_numeric_dtype(df["Rating"]):
-        kpis["avg_rating"] = round(df["Rating"].mean(), 2)
-        kpis["delta_rating"] = None  # Hier könnte man Logik für Veränderung einbauen
-    else:
-        kpis["avg_rating"] = "N/A"
+    # 1. Datum parsen
+    if "Date" not in df.columns:
+        return None
+    df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
+    df = df.dropna(subset=["Date"]).sort_values("Date")
 
-    # 3. Sentiment Score (Positive vs Negative Ratio)
-    # Wir bevorzugen BERT, dann LLaMA, dann SentiWS
-    sent_col = None
-    if "BERT_Sentiment" in df.columns:
-        sent_col = "BERT_Sentiment"
-    elif "LLaMA_Kategorie" in df.columns:
-        sent_col = "LLaMA_Kategorie"
-    elif "Wortliste_Sentiment" in df.columns:
-        sent_col = "Wortliste_Sentiment"
+    # 2. Metrik berechnen
+    val_col = "Value"
 
-    if sent_col:
-        # Wir zählen "positive" (oder "positiv")
-        pos_count = df[sent_col].astype(str).str.lower().str.contains("pos").sum()
-        ratio = (pos_count / len(df)) * 100
-        kpis["sentiment_score"] = f"{ratio:.1f}%"
-        kpis["sentiment_label"] = "Positiv-Rate"
-    else:
-        kpis["sentiment_score"] = "-"
-        kpis["sentiment_label"] = "Sentiment"
+    if metric_type == "BERT (Sentiment)":
+        if "BERT_Sentiment" in df.columns and "BERT_Score" in df.columns:
+            # Wir machen aus Label + Score einen Wert zwischen -1 und 1
+            # Logik: Score * (1 wenn positiv, -1 wenn negativ)
+            def get_signed_score(row):
+                label = str(row["BERT_Sentiment"]).lower()
+                score = float(row["BERT_Score"])
+                if "neg" in label: return -score
+                if "pos" in label: return score
+                return 0  # neutral
 
-    return kpis
-
-
-# --- DISPLAY FUNKTION (IM STOCK PEERS STYLE) ---
-def display_results(df, key_suffix="default"):
-    # --- 1. DIE KPI REIHE (Das Herzstück des Stock Templates) ---
-    kpis = calculate_kpis(df)
-
-    # 4 Spalten für Metriken
-    m1, m2, m3, m4 = st.columns(4)
-
-    with m1:
-        st.metric(label="Total Reviews", value=kpis["count"])
-
-    with m2:
-        st.metric(label="Durchschnittsbewertung", value=kpis["avg_rating"], delta=None)  # Delta könnte Trend sein
-
-    with m3:
-        st.metric(label=kpis["sentiment_label"], value=kpis["sentiment_score"])
-
-    with m4:
-        # Platzhalter für Download oder Gehalt
-        if "Salary" in df.columns:
-            avg_sal = f"{df['Salary'].mean():,.0f} €" if pd.api.types.is_numeric_dtype(df["Salary"]) else "-"
-            st.metric(label="Ø Gehalt", value=avg_sal)
+            df[val_col] = df.apply(get_signed_score, axis=1)
         else:
-            st.metric(label="Datenquelle", value="Analysiert")
+            return None
 
-    st.markdown("---")  # Trennlinie
-
-    # --- 2. GEHALTS-ANSICHT (Spezialfall) ---
-    if "Salary" in df.columns and "Position" in df.columns:
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            st.subheader("Gehaltsverteilung (Top 15)")
-            df_plot = df.sort_values("Gehaltsangaben", ascending=False).head(15)
-            st.bar_chart(df_plot.set_index("Position")["Salary"])
-        with c2:
-            st.info("Gehaltsdaten enthalten keine Text-Reviews.")
-
-        # Tabelle im Expander
-        with st.expander("📥 Rohdaten & Tabelle anzeigen", expanded=False):
-            st.dataframe(df)
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='Gehaelter', index=False)
-            output.seek(0)
-            st.download_button("Download Excel", output, "kununu_gehalt.xlsx", key=f"dl_{key_suffix}")
-        return
-
-    # --- 3. DASHBOARD VISUALISIERUNGEN ---
-
-    # Reihe 1: Timeline (Groß, wie der Stock Chart)
-    st.subheader("📈 Sentiment Trend & Verlauf")
-    fig_time = reporting.plot_sentiment_timeline(df)
-    if fig_time:
-        st.pyplot(fig_time)
-    else:
-        st.info("Keine Zeitdaten für eine Trendlinie verfügbar.")
-
-    # Reihe 2: Grid Layout (2 Spalten)
-    c1, c2 = st.columns(2)
-
-    with c1:
-        st.subheader("Sentiment Verteilung")
-        # Priorität: LLaMA > BERT > SentiWS > Sterne
-        if 'LLaMA_Kategorie' in df.columns:
-            fig = reporting.plot_llama_distribution(df)
-            st.pyplot(fig)
-        elif 'BERT_Sentiment' in df.columns:
-            fig = reporting.plot_bert_distribution(df)
-            st.pyplot(fig)
-        elif 'Rating' in df.columns:
-            fig = reporting.plot_star_distribution(df)
-            st.pyplot(fig)
-
-    with c2:
-        st.subheader("Themen & Aspekte")
-        fig_aspects = reporting.plot_aspect_heatmap(df)
-        if fig_aspects:
-            st.pyplot(fig_aspects)
-        elif 'lemmatized' in df.columns:
-            fig_wc = reporting.create_wordcloud(df['lemmatized'], "Top Begriffe")
-            if fig_wc: st.pyplot(fig_wc)
+    elif metric_type == "LLaMA (Klassifizierung)":
+        if "LLaMA_Kategorie" in df.columns:
+            # Mapping: positiv=1, negativ=-1, neutral=0, verbesserung=0.5 (optional)
+            mapping = {"positiv": 1.0, "positive": 1.0, "negativ": -1.0, "negative": -1.0, "neutral": 0.0}
+            df[val_col] = df["LLaMA_Kategorie"].astype(str).str.lower().map(mapping).fillna(0.0)
         else:
-            st.caption("Keine Aspekt-Daten verfügbar.")
+            return None
 
-    # --- 4. RAW DATA EXPANDER (Wie im Template) ---
-    st.markdown("###")
-    with st.expander("📥 Detaillierte Rohdaten ansehen", expanded=False):
-        st.dataframe(df)
+    elif metric_type == "Wortliste (SentiWS)":
+        if "Wortliste_Score" in df.columns:
+            df[val_col] = pd.to_numeric(df["Wortliste_Score"], errors='coerce').fillna(0)
+        else:
+            return None
 
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Analyse_Ergebnisse', index=False)
-        output.seek(0)
-        st.download_button(
-            "📥 Excel Download",
-            output,
-            "analyse_report.xlsx",
-            key=f"dl_btn_{key_suffix}"
+    elif metric_type == "Sterne Bewertung":
+        if "Rating" in df.columns:
+            df[val_col] = pd.to_numeric(df["Rating"], errors='coerce')
+        else:
+            return None
+
+    else:
+        return None
+
+    return df[["Date", val_col]]
+
+
+# --- TABS STRUKTUR ---
+tab_setup, tab_dashboard = st.tabs(["🛠️ Setup & Daten", "📈 Analyse-Dashboard"])
+
+# ==============================================================================
+# TAB 1: DATENERFASSUNG & EINSTELLUNGEN
+# ==============================================================================
+with tab_setup:
+    c_conf1, c_conf2 = st.columns([1, 2])
+
+    with c_conf1:
+        st.subheader("1. Quellen verwalten")
+
+        # Bestehende Quellen anzeigen
+        st.write("**Gespeicherte Quellen:**")
+        for s in st.session_state.sources_db:
+            st.text(f"• {s['name']} ({s['type']})")
+
+        with st.expander("➕ Neue Quelle hinzufügen", expanded=True):
+            new_name = st.text_input("Name (Firma)", placeholder="z.B. SAP")
+            new_type = st.selectbox("Typ", ["Trustpilot (Kommentare)", "Kununu (Kommentare)", "Kununu (Gehälter)"])
+            new_url = st.text_input("URL")
+            if st.button("Speichern"):
+                if new_name and new_url:
+                    st.session_state.sources_db.append({"name": new_name, "url": new_url, "type": new_type})
+                    st.success(f"{new_name} hinzugefügt!")
+                    st.rerun()
+
+    with c_conf2:
+        st.subheader("2. Scraping & Analyse Parameter")
+
+        # Auswahl was gescrapt werden soll (Multiselect aus DB)
+        source_options = [s["name"] for s in st.session_state.sources_db]
+        sources_to_scrape = st.multiselect("Welche Quellen sollen aktualisiert/analysiert werden?",
+                                           source_options, default=source_options[:1] if source_options else None)
+
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            st.markdown("**Scraping Limits**")
+            max_pages = st.number_input("Max. Seiten scrapen", 1, 50, 3)
+
+        with col_p2:
+            st.markdown("**Analyse Tiefe**")
+            limit_analysis = st.number_input("Anzahl Reviews analysieren", 10, 500, 50)
+
+        st.markdown("**KI-Modelle auswählen**")
+        c_m1, c_m2, c_m3, c_m4 = st.columns(4)
+        use_sentiws = c_m1.checkbox("Wortliste (SentiWS)", True)
+        use_bert = c_m2.checkbox("BERT (Sentiment)", True)
+        use_spacy = c_m3.checkbox("Spacy (Aspekte)", False)
+        use_llama = c_m4.checkbox("LLaMA (Groq)", False)
+
+        st.markdown("---")
+
+        if st.button("🚀 Daten abrufen & Analyse starten", type="primary"):
+            if not sources_to_scrape:
+                st.error("Bitte wähle mindestens eine Quelle aus.")
+            else:
+                progress_bar = st.progress(0)
+                status = st.empty()
+                results_buffer = st.session_state.analysis_results.copy()  # Behalte alte Ergebnisse
+
+                total_steps = len(sources_to_scrape)
+                for i, s_name in enumerate(sources_to_scrape):
+                    status.write(f"Bearbeite: **{s_name}**...")
+
+                    # Config finden
+                    cfg = next(s for s in st.session_state.sources_db if s["name"] == s_name)
+
+                    # 1. Scraping
+                    df = pd.DataFrame()
+                    try:
+                        if "Trustpilot" in cfg["type"]:
+                            data = scraper.scrape_trustpilot_reviews(cfg["url"], max_pages=max_pages)
+                            df = pd.DataFrame(data)
+                            col = "Body"
+                        elif "Kununu (Kommentare)" in cfg["type"]:
+                            data = scraper.scrape_kununu_comments(cfg["url"], max_pages_to_click=max_pages)
+                            df = pd.DataFrame(data)
+                            if not df.empty:
+                                df['Body'] = df['Pros'].fillna('') + ' ' + df['Cons'].fillna('')
+                            col = "Body"
+                        elif "Gehälter" in cfg["type"]:
+                            data = scraper.scrape_kununu_salary(cfg["url"], max_pages_to_click=max_pages)
+                            df = pd.DataFrame(data)
+                            col = None
+                    except Exception as e:
+                        st.error(f"Fehler bei {s_name}: {e}")
+                        continue
+
+                    # 2. Analyse
+                    if not df.empty and col and "Salary" not in df.columns:
+                        df_sub = df.head(limit_analysis).copy()
+                        if use_sentiws: df_sub = analysis.run_wordlist_sentiment(df_sub, col)
+                        if use_bert: df_sub = analysis.run_bert_sentiment(df_sub, col)
+                        if use_llama: df_sub = analysis.run_llama_classification(df_sub, col)
+                        if use_spacy: df_sub = analysis.run_aspect_analysis(df_sub, col)
+                        results_buffer[s_name] = df_sub
+                    elif not df.empty:
+                        results_buffer[s_name] = df
+
+                    progress_bar.progress((i + 1) / total_steps)
+
+                st.session_state.analysis_results = results_buffer
+                st.session_state.selected_view_sources = sources_to_scrape  # Setze Default Auswahl im Dashboard
+                status.success("Fertig! Wechsel zum Tab 'Analyse-Dashboard' um die Ergebnisse zu sehen.")
+                time.sleep(1)
+                st.rerun()
+
+# ==============================================================================
+# TAB 2: STOCK PEER DASHBOARD
+# ==============================================================================
+with tab_dashboard:
+    available_sources = list(st.session_state.analysis_results.keys())
+
+    # 1. Spalten-Layout (1:3)
+    cols = st.columns([1, 3])
+
+    # --- LINKES PANEL (CONTROLS) ---
+    top_left_cell = cols[0].container(border=True)
+
+    with top_left_cell:
+        st.subheader("Einstellungen")
+
+        # A) Firmen Auswahl
+        tickers = st.multiselect(
+            "1. Firmen vergleichen:",
+            options=available_sources,
+            default=st.session_state.selected_view_sources if st.session_state.selected_view_sources else available_sources[
+                                                                                                          :2],
+            placeholder="Wähle Firmen..."
         )
 
+        st.write("")
 
-# --- SIDEBAR ---
-col1, col2 = st.sidebar.columns([1, 4])
-with col2:
-    st.markdown("# Review Tool")
+        # B) Metrik Auswahl (NEU: Basierend auf welchem Output?)
+        metric_choice = st.radio(
+            "2. Daten-Basis für Vergleich:",
+            ["BERT (Sentiment)", "Wortliste (SentiWS)", "LLaMA (Klassifizierung)", "Sterne Bewertung"],
+            index=0
+        )
 
-st.sidebar.header("1. Datenquelle")
+        st.caption(
+            "Hinweis: 'BERT' und 'Wortliste' zeigen Werte von ca. -1 (negativ) bis +1 (positiv). 'Sterne' zeigt 1-5.")
 
-source_type = st.sidebar.radio(
-    "Quelle:",
-    ["Trustpilot (Kommentare)", "Kununu (Kommentare)", "Kununu (Gehälter)", "Excel-Datei hochladen"],
-    key="source_type"
-)
+    if not tickers:
+        st.warning("Bitte wähle mindestens eine Firma aus.")
+        st.stop()
 
-url = ""
-run_text_analysis_possible = True
+    # --- DATEN VORBEREITUNG (COMBINED DF) ---
+    # Wir erstellen ein DataFrame, das für ALLE gewählten Firmen die Zeitreihe enthält.
+    # Wichtig: Wir resamplen auf Tage, um Vergleichbarkeit zu gewährleisten.
 
-if source_type == "Trustpilot (Kommentare)":
-    url = st.sidebar.text_input("URL:", "https://www.trustpilot.com/review/...")
-    st.session_state.text_column = "Body"
-elif "Kununu" in source_type:
-    url = st.sidebar.text_input("URL:", "https://www.kununu.com/de/...")
-    if "Gehälter" in source_type:
-        run_text_analysis_possible = False
-    else:
-        st.session_state.text_column = "Analyse_Text"
-elif source_type == "Excel-Datei hochladen":
-    uploaded_file = st.sidebar.file_uploader("Excel (.xlsx)", type=["xlsx"])
-    if uploaded_file:
-        df_upload = pd.read_excel(uploaded_file)
-        st.session_state.raw_df = df_upload
-        st.sidebar.success(f"Excel geladen: {len(df_upload)} Zeilen")
-        cols = df_upload.columns.tolist()
-        idx = cols.index("Body") if "Body" in cols else 0
-        st.session_state.text_column = st.sidebar.selectbox("Text-Spalte:", cols, index=idx)
+    combined_df = pd.DataFrame()
 
-if "Excel" not in source_type:
-    max_pages = st.sidebar.number_input("Max. Seiten/Klicks:", 1, 100, 5)
-    if st.sidebar.button("📥 1. Daten abrufen"):
-        st.session_state.results_df = None
-        st.session_state.raw_df = None
+    for t in tickers:
+        raw_df = st.session_state.analysis_results.get(t)
+        if raw_df is not None:
+            ts_df = prepare_time_series(raw_df, metric_choice)
 
-        with st.spinner("Hole Daten..."):
-            try:
-                if "Trustpilot" in source_type:
-                    data = scraper.scrape_trustpilot_reviews(url, max_pages=max_pages)
-                    st.session_state.raw_df = pd.DataFrame(data)
-                elif "Kommentare" in source_type:
-                    data = scraper.scrape_kununu_comments(url, max_pages_to_click=max_pages)
-                    df = pd.DataFrame(data)
-                    if not df.empty:
-                        df['Analyse_Text'] = df['Pros'].fillna('') + ' ' + df['Cons'].fillna('') + ' ' + df[
-                            'Suggestions'].fillna('')
-                    st.session_state.raw_df = df
-                elif "Gehälter" in source_type:
-                    data = scraper.scrape_kununu_salary(url, max_pages_to_click=max_pages)
-                    st.session_state.raw_df = pd.DataFrame(data)
+            if ts_df is not None and not ts_df.empty:
+                # Umbenennen für Join
+                ts_df = ts_df.rename(columns={"Value": t})
+                ts_df = ts_df.set_index("Date")
 
-                if st.session_state.raw_df is not None and not st.session_state.raw_df.empty:
-                    st.toast(f"{len(st.session_state.raw_df)} Datensätze geladen!", icon="✅")
+                # Resampling auf Tagesbasis (Mittelwert pro Tag), damit Index eindeutig ist
+                ts_df = ts_df.resample('D').mean()
+
+                if combined_df.empty:
+                    combined_df = ts_df
                 else:
-                    st.error("Keine Daten gefunden.")
-            except Exception as e:
-                st.error(f"Fehler: {e}")
+                    combined_df = combined_df.join(ts_df, how="outer")
 
-st.divider()
-
-# --- ANALYSE BUTTON ---
-if run_text_analysis_possible and st.session_state.raw_df is not None:
-    st.sidebar.header("2. Analyse")
-
-    data_len = len(st.session_state.raw_df)
-    default_limit = min(50, data_len)
-    limit = st.sidebar.number_input("Anzahl analysieren:", 1, data_len, default_limit)
-
-    run_ws = st.sidebar.checkbox("Wortliste (SentiWS)", True)
-    run_bert = st.sidebar.checkbox("BERT (oliverguhr)", True)
-    run_aspect = st.sidebar.checkbox("Aspekte (Spacy)", False)
-    run_llama = st.sidebar.checkbox("LLaMA (Groq)", False)
-
-    if st.sidebar.button("🧠 2. KI-Analyse starten"):
-        df_to_analyze = st.session_state.raw_df.head(limit).copy()
-        col = st.session_state.text_column
-
-        if col not in df_to_analyze.columns:
-            st.error(f"Spalte '{col}' nicht gefunden!")
-        else:
-            with st.spinner("KI arbeitet..."):
-                try:
-                    if run_ws: df_to_analyze = analysis.run_wordlist_sentiment(df_to_analyze, col)
-                    if run_bert: df_to_analyze = analysis.run_bert_sentiment(df_to_analyze, col)
-                    if run_aspect: df_to_analyze = analysis.run_aspect_analysis(df_to_analyze, col)
-                    if run_llama: df_to_analyze = analysis.run_llama_classification(df_to_analyze, col)
-
-                    st.session_state.results_df = df_to_analyze
-                    st.toast("Analyse fertig!", icon="🎉")
-                except Exception as e:
-                    st.error(f"Fehler: {e}")
-
-# --- HAUPTBEREICH (DASHBOARD) ---
-# Überschrift entfernen wir hier fast, weil die Metrics oben stehen sollen
-st.title(f"Analyse Report: {source_type.split('(')[0]}")
-
-if st.session_state.results_df is not None:
-    display_results(st.session_state.results_df, key_suffix="final")
-elif st.session_state.raw_df is not None:
-    if not run_text_analysis_possible:
-        display_results(st.session_state.raw_df, key_suffix="raw")
+    # Sortieren und Interpolieren (optional, hier lassen wir Lücken ggf. sichtbar oder füllen sie für den Plot)
+    if not combined_df.empty:
+        combined_df = combined_df.sort_index()
+        # Gleitender Durchschnitt für Glättung (macht Charts lesbarer)
+        combined_df_smoothed = combined_df.rolling(window=7, min_periods=1).mean()
     else:
-        st.info("Rohdaten geladen. Starte links die KI-Analyse für Insights.")
-        st.dataframe(st.session_state.raw_df)
-else:
-    st.markdown("### Willkommen!")
-    st.markdown("Wähle links eine Datenquelle, um zu starten.")
+        combined_df_smoothed = pd.DataFrame()
+
+    # --- METRICS (LINKS UNTEN) ---
+    bottom_left_cell = cols[0].container(border=True)
+    with bottom_left_cell:
+        if not combined_df_smoothed.empty:
+            # Letzter verfügbarer Wert (Stand heute/letztes Datum)
+            last_valid_idx = combined_df_smoothed.last_valid_index()
+            if last_valid_idx:
+                current_vals = combined_df_smoothed.loc[last_valid_idx]
+
+                best_ticker = current_vals.idxmax()
+                worst_ticker = current_vals.idxmin()
+
+                c_met1, c_met2 = st.columns(2)
+
+                val_fmt = "{:.2f}"
+                c_met1.metric("Top Trend", best_ticker, val_fmt.format(current_vals[best_ticker]))
+                c_met2.metric("Low Trend", worst_ticker, val_fmt.format(current_vals[worst_ticker]),
+                              delta_color="inverse")
+            else:
+                st.info("Daten vorhanden, aber keine aktuellen Werte.")
+        else:
+            st.info("Keine Daten für die gewählte Metrik.")
+
+    # --- MAIN CHART (RECHTS) - ZEITLICHER VERLAUF ---
+    right_cell = cols[1].container(border=True)
+    with right_cell:
+        if not combined_df_smoothed.empty:
+            # Für Altair in Long-Format bringen
+            long_df = combined_df_smoothed.reset_index().melt('Date', var_name='Firma', value_name='Score')
+
+            # Titel basierend auf Metrik
+            chart_title = f"Zeitlicher Verlauf: {metric_choice}"
+
+            chart = alt.Chart(long_df).mark_line(point=True).encode(
+                x=alt.X("Date:T", title="Datum"),
+                y=alt.Y("Score:Q", title="Score (geglättet)", scale=alt.Scale(zero=False)),
+                color=alt.Color("Firma:N", legend=alt.Legend(orient="bottom")),
+                tooltip=["Date", "Firma", alt.Tooltip("Score", format=".2f")]
+            ).properties(
+                title=chart_title,
+                height=450
+            ).interactive()
+
+            st.altair_chart(chart, use_container_width=True)
+        else:
+            st.warning(f"Für die ausgewählten Firmen gibt es keine Daten im Bereich '{metric_choice}'.")
+
+    st.write("")
+
+    # --- INDIVIDUAL VS PEER AVERAGE (GRID) ---
+    if not combined_df_smoothed.empty and len(tickers) >= 2:
+        st.markdown("### 🆚 Vergleich: Firma vs. Durchschnitt (Peers)")
+        st.markdown("Wie schneidet die Firma im Vergleich zum Durchschnitt der anderen ab?")
+
+        NUM_COLS = 4
+        grid_cols = st.columns(NUM_COLS)
+
+        # Nutze geglättete Daten für den Vergleich
+        df_comp = combined_df_smoothed.dropna(how='all')
+
+        for i, ticker in enumerate(tickers):
+            if ticker not in df_comp.columns: continue
+
+            # Peer Average berechnen (Durchschnitt aller ANDEREN Spalten)
+            other_cols = [c for c in df_comp.columns if c != ticker]
+            if not other_cols: continue
+
+            peer_avg = df_comp[other_cols].mean(axis=1)
+
+            # Plot Data Vorbereitung
+            plot_data = pd.DataFrame({
+                "Date": df_comp.index,
+                ticker: df_comp[ticker],
+                "Peer Average": peer_avg
+            }).melt(id_vars=["Date"], var_name="Type", value_name="Value")
+
+            # 1. Line Chart
+            line_chart = alt.Chart(plot_data).mark_line().encode(
+                x=alt.X("Date:T", axis=alt.Axis(labels=False, title=None)),
+                y=alt.Y("Value:Q", scale=alt.Scale(zero=False), title=None),
+                color=alt.Color("Type:N",
+                                scale=alt.Scale(domain=[ticker, "Peer Average"], range=["#1f77b4", "#d62728"]),
+                                legend=None),
+                tooltip=["Date", "Type", alt.Tooltip("Value", format=".2f")]
+            ).properties(title=f"{ticker} vs. Ø", height=180)
+
+            # 2. Delta Area Chart
+            delta_data = pd.DataFrame({
+                "Date": df_comp.index,
+                "Delta": df_comp[ticker] - peer_avg
+            })
+
+            area_chart = alt.Chart(delta_data).mark_area(opacity=0.6).encode(
+                x=alt.X("Date:T", title=None),
+                y=alt.Y("Delta:Q", title="Abweichung"),
+                color=alt.condition(
+                    alt.datum.Delta > 0,
+                    alt.value("green"),
+                    alt.value("red")
+                ),
+                tooltip=[alt.Tooltip("Date", format="%Y-%m-%d"), alt.Tooltip("Delta", format=".2f")]
+            ).properties(height=180)
+
+            # Anzeigen im Grid
+            # Spalte 1: Line Chart
+            c_idx = (i * 2) % NUM_COLS
+            with grid_cols[c_idx].container(border=True):
+                st.altair_chart(line_chart, use_container_width=True)
+
+            # Spalte 2: Delta Chart
+            with grid_cols[c_idx + 1].container(border=True):
+                st.altair_chart(area_chart, use_container_width=True)
+
+    elif len(tickers) < 2 and not combined_df_smoothed.empty:
+        st.info("Wähle mindestens 2 Firmen für den Peer-Vergleich.")
+
+    # --- RAW DATA ---
+    st.write("---")
+    with st.expander("📥 Detaillierte Daten ansehen"):
+        st.dataframe(combined_df, use_container_width=True)
