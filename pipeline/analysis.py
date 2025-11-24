@@ -292,4 +292,5 @@ def run_aspect_analysis(df: pd.DataFrame, text_column: str) -> pd.DataFrame:
         df[neg_col] = [s['neg'] for s in scores]
 
     print("Aspekt-Analyse abgeschlossen.")
+    print(df.head(20))
     return df

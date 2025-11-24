@@ -60,6 +60,8 @@ def scrape_trustpilot_reviews(base_url: str, max_pages: int = 1000):
 
         if page_number == 1:
             url = base_url
+        elif '?' in base_url:
+            url = f"{base_url}&page={page_number}"
         else:
             url = f"{base_url}?page={page_number}"
 
