@@ -12,6 +12,8 @@ nltk
 matplotlib
 wordcloud
 seaborn
+python-dotenv==1.2.1
+
 
 # NEU: Für Kununu-Scraper (Punkt 2)
 selenium

@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import altair as alt
 import time
 import json
-import numpy as np
 
 import scraper
 import analysis
@@ -208,7 +206,7 @@ with tab_setup:
 
     with c1:
         st.subheader("1. Quellen")
-        with st.expander("➕ Neue Quelle", expanded=True):
+        with st.expander("Neue Quelle", expanded=True):
             st.markdown("**URL hinzufügen**")
             new_name = st.text_input("Name", placeholder="Firma XY")
             new_type = st.selectbox("Typ", ["Trustpilot (Kommentare)", "Kununu (Kommentare)", "Kununu (Gehälter)"])
@@ -272,7 +270,6 @@ with tab_setup:
                     df = pd.DataFrame()
 
                     try:
-                        # --- 1. DATEN HOLEN ---
                         if "file" in cfg:
                             f = cfg["file"]
                             if f.name.endswith('.csv'):
@@ -437,18 +434,14 @@ with tab_dashboard:
 
     with cols[1].container(border=True):
 
-        # 1. FALL: GEHALTS-DARSTELLUNG
         if is_salary_mode:
             if not salary_combined.empty:
                 st.subheader("Gehaltsvergleich nach Position")
 
-                # 1. Berechne die tatsächliche Höhe, die das Chart braucht
-                #    z.B. 40 Pixel pro Balken. Bei 50 Positionen sind das 2000 Pixel.
                 num_positions = salary_combined["Position"].nunique()
                 row_height = 40
                 real_chart_height = max(500, num_positions * row_height + 80)
 
-                # 2. Erstelle das "riesige" Chart
                 chart = alt.Chart(salary_combined).mark_bar().encode(
                     x=alt.X("Salary:Q", title="Jahresgehalt (€)"),
                     y=alt.Y("Position:N", sort="-x", title="Position"),  # Sortiert nach Gehalt
@@ -460,7 +453,6 @@ with tab_dashboard:
                         alt.Tooltip("Gehaltsangaben", title="Anzahl Datensätze")
                     ]
                 ).properties(
-                    # WICHTIG: Hier die berechnete volle Höhe eintragen
                     height=real_chart_height,
                     title="Durchschnittsgehälter pro Position"
                 ).interactive()

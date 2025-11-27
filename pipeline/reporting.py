@@ -16,8 +16,8 @@ def create_wordcloud(text_series, title):
 
     custom_ignore = [
         "pros", "cons", "suggestions", "verbesserungsvorschlag", "verbesserungsvorschläge",
-        "gut", "schlecht", "arbeitgeber",  # Taucht in den Kununu-Headern oft auf
-        "nan", "none", "null",  # Leere Felder aus Excel/Pandas
+        "gut", "schlecht", "arbeitgeber",
+        "nan", "none", "null",
         "bewertung", "kommentar", "categories"
     ]
 
@@ -46,7 +46,6 @@ def create_wordcloud(text_series, title):
 
 
 def plot_llama_distribution(df):
-    """Zeigt LLaMA-Kategorien an und erzwingt alle 4 Labels."""
     if 'LLaMA_Kategorie' not in df.columns: return None
 
     categories = ["positiv", "neutral", "negativ", "Verbesserungsvorschlag"]
@@ -66,7 +65,6 @@ def plot_llama_distribution(df):
 
 
 def plot_bert_distribution(df):
-    """Zeigt BERT-Sentiment mit Seaborn an."""
     if 'BERT_Sentiment' not in df.columns: return None
 
     categories = ["positive", "neutral", "negative"]
@@ -81,7 +79,6 @@ def plot_bert_distribution(df):
 
 
 def plot_star_distribution(df):
-    """Zeigt die Verteilung der Sterne-Bewertungen (falls vorhanden)."""
     if 'Rating' not in df.columns: return None
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -94,7 +91,6 @@ def plot_star_distribution(df):
 
 
 def plot_aspect_heatmap(df):
-    """Erstellt eine Übersicht über alle Aspekte (Positiv vs Negativ)."""
     pos_cols = [c for c in df.columns if c.endswith('_pos')]
     neg_cols = [c for c in df.columns if c.endswith('_neg')]
 
@@ -123,7 +119,6 @@ def plot_aspect_heatmap(df):
 
 
 def plot_correlation_heatmap(df):
-    """Zeigt Korrelationen zwischen Sternen, Wortlänge und Sentiment-Scores."""
     cols_to_corr = []
 
     df_calc = df.copy()
@@ -146,26 +141,21 @@ def plot_correlation_heatmap(df):
 
 
 def plot_correlation_heatmap_salary(df):
-    """Erstellt eine Heatmap der Korrelationen zwischen numerischen Spalten."""
-    # Nur numerische Spalten nehmen
     numeric_df = df.select_dtypes(include=['number'])
 
-    # Unnötige Spalten rauswerfen (z.B. Indizes oder IDs falls vorhanden)
     numeric_df = numeric_df.loc[:, ~numeric_df.columns.str.contains('^Unnamed')]
 
-    if numeric_df.shape[1] < 2: return None  # Braucht mind. 2 Spalten
+    if numeric_df.shape[1] < 2: return None
 
     corr = numeric_df.corr()
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    # Dark Mode Anpassung
     fig.patch.set_facecolor('#0e1117')
     ax.set_facecolor('#0e1117')
 
     sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f", ax=ax,
                 cbar_kws={"shrink": .8})
 
-    # Textfarben für Dark Mode
     ax.tick_params(colors='white', which='both')
     cbar = ax.collections[0].colorbar
     cbar.ax.tick_params(colors='white')

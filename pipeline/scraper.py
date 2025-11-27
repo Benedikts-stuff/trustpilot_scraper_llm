@@ -1,4 +1,3 @@
-# scraper.py
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -38,10 +37,6 @@ def get_reviews_from_page(url):
 
 
 def scrape_trustpilot_reviews(base_url: str, max_pages: int = 1000):
-    """
-    Scrapt Trustpilot-Reviews.
-    Stoppt, wenn keine Reviews mehr gefunden werden ODER max_pages erreicht ist.
-    """
     reviews_data = []
     page_number = 1
 
@@ -86,10 +81,6 @@ def scrape_trustpilot_reviews(base_url: str, max_pages: int = 1000):
 # ==============================================================
 
 def _setup_selenium_driver():
-    """
-    Initialisiert einen Selenium-Driver von einer LOKALEN chromedriver-Datei.
-    Diese Funktion nutzt absolute Pfade und ist CWD-unabhängig.
-    """
     print("Initialisiere Selenium WebDriver...")
     opts = webdriver.ChromeOptions()
     # opts.add_argument("--headless")
@@ -131,7 +122,6 @@ def _setup_selenium_driver():
 
 
 def _hide_consent_banner(driver):
-    """Versucht, das Cookie-Banner zu entfernen (aus kununu_salary.py)."""
     try:
         driver.execute_script("""
         const interval = setInterval(() => {
@@ -155,7 +145,6 @@ def _hide_consent_banner(driver):
 
 
 def _expand_all_reviews(driver, max_pages_to_click: int):
-    """Klickt 'Mehr anzeigen' für Review-Listen (DEIN PUNKT 1)."""
     clicks = 0
     wait = WebDriverWait(driver, 10)
 
@@ -195,7 +184,6 @@ def _expand_all_reviews(driver, max_pages_to_click: int):
 
 
 def _expand_all_jobs(driver, max_pages_to_click: int):
-    """Klickt 'MEHR JOBTITEL ANZEIGEN' basierend auf Textinhalt statt Hash-Klassen."""
     clicks = 0
     wait = WebDriverWait(driver, 5)  # Kurzer Wait reicht oft
 
@@ -231,7 +219,6 @@ def _expand_all_jobs(driver, max_pages_to_click: int):
             break
 
 def _parse_review_cards(driver):
-    """Parst alle geladenen Review-Karten (Logik aus test.py)."""
     reviews = []
     cards = driver.find_elements(By.CSS_SELECTOR, "div.index__reviewBlock__I8pdb")
     print(f"{len(cards)} Review-Karten im DOM gefunden. Parse...")
@@ -295,7 +282,6 @@ def _parse_review_cards(driver):
 
 
 def scrape_kununu_comments(url: str, max_pages_to_click: int = 50):
-    """Hauptfunktion zum Scrapen von Kununu-Kommentaren."""
     print("Starte Kununu-Kommentar-Scraper...")
     driver = _setup_selenium_driver()
     if driver is None: return []
@@ -315,7 +301,6 @@ def scrape_kununu_comments(url: str, max_pages_to_click: int = 50):
 
 
 def scrape_kununu_salary(url: str, max_pages_to_click: int = 50):
-    """Hauptfunktion zum Scrapen von Kununu-Gehältern."""
     print("Starte Kununu-Gehalts-Scraper...")
     driver = _setup_selenium_driver()
     if driver is None: return []

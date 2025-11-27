@@ -1,32 +1,16 @@
-# analysis.py
 import re
 import time
 import pandas as pd
-from collections import Counter, defaultdict
-from typing import List
 
-# --- Nötige Bibliotheken für die Analysen ---
 from transformers import pipeline
 from groq import Groq
 import spacy
-import nltk
-from nltk.corpus import stopwords
-import streamlit as st  # <-- WICHTIGER NEUER IMPORT
+import streamlit as st
 
-# Importiere unsere zentrale Konfiguration
-# (Stelle sicher, dass config.py noch existiert, ODER
-# verschiebe die API-Keys und Pfade hierher)
 import config
-
-
-# --- Modell-Ladefunktionen mit CACHING ---
-# Dies ist die neue, schnelle Methode.
-# Die Modelle werden erst geladen, wenn sie gebraucht werden,
-# und bleiben dann im Speicher.
 
 @st.cache_resource
 def get_bert_model():
-    """Lädt und cached das BERT-Modell."""
     print("Lade BERT-Modell (dies passiert nur einmal)...")
     try:
         return pipeline(
@@ -40,7 +24,6 @@ def get_bert_model():
 
 @st.cache_resource
 def get_spacy_model():
-    """Lädt und cached das Spacy-Modell."""
     print("Lade Spacy-Modell (dies passiert nur einmal)...")
     try:
         return spacy.load("de_core_news_sm")
@@ -52,7 +35,6 @@ def get_spacy_model():
 
 @st.cache_resource
 def get_senti_dict():
-    """Lädt und cached die SentiWS-Wortlisten."""
     print("Lade SentiWS-Wortlisten (dies passiert nur einmal)...")
     senti_dict = {}
 
@@ -85,7 +67,6 @@ def get_senti_dict():
 
 @st.cache_resource
 def get_llama_client():
-    """Initialisiert und cached den Groq-Client."""
     print("Initialisiere LLaMA (Groq) Client...")
     return Groq(api_key=config.GROQ_API_KEY)
 
@@ -133,7 +114,6 @@ def run_wordlist_sentiment(df: pd.DataFrame, text_column: str) -> pd.DataFrame:
 # =======================================================================
 
 def calculate_bert_sentiment(text: str, model) -> dict:
-    """Analysiert einen Text mit dem (jetzt übergebenen) BERT-Modell."""
     try:
         result = model(text[:512])[0]
         return result
@@ -143,7 +123,6 @@ def calculate_bert_sentiment(text: str, model) -> dict:
 
 
 def run_bert_sentiment(df: pd.DataFrame, text_column: str) -> pd.DataFrame:
-    # HOLT DAS MODELL AUS DEM CACHE (oder lädt es beim ersten Mal)
     model = get_bert_model()
     if model is None:
         st.error("BERT-Modell konnte nicht geladen werden. Überspringe...")
@@ -162,7 +141,6 @@ def run_bert_sentiment(df: pd.DataFrame, text_column: str) -> pd.DataFrame:
 # =======================================================================
 
 def build_llama_prompt(review_block: str) -> str:
-    # (Keine Änderung hier)
     prompt = f"""Du erhältst eine Bewertung von einem Mitarbeiter.
 Ordne diese Bewertung einer der folgenden vier Kategorien zu:
 - positiv
@@ -180,7 +158,6 @@ Hier ist die Bewertung:
 
 
 def parse_llama_output(llama_response: str) -> str:
-    # (Keine Änderung hier)
     line = llama_response.strip().lower()
     if line.startswith("+"): line = line[1:].strip()
     if line in {"positiv", "neutral", "negativ", "verbesserungsvorschlag"}: return line
@@ -192,7 +169,6 @@ def parse_llama_output(llama_response: str) -> str:
 
 
 def classify_with_llama(text: str, client) -> str:
-    """Führt eine einzelne Klassifizierung mit LLaMA durch."""
     prompt = build_llama_prompt(text)
     try:
         chat_completion = client.chat.completions.create(
@@ -211,12 +187,11 @@ def classify_with_llama(text: str, client) -> str:
         if "rate limit" in str(e).lower():
             print("Rate-Limit erreicht. Warte 60 Sekunden...")
             time.sleep(60)
-            return classify_with_llama(text, client)  # Erneuter Versuch
+            return classify_with_llama(text, client)
         return "error"
 
 
 def run_llama_classification(df: pd.DataFrame, text_column: str) -> pd.DataFrame:
-    # HOLT DEN CLIENT AUS DEM CACHE
     client = get_llama_client()
     if client is None:
         st.error("Groq-Client konnte nicht initialisiert werden. Überspringe...")
@@ -233,15 +208,14 @@ def run_llama_classification(df: pd.DataFrame, text_column: str) -> pd.DataFrame
         label = classify_with_llama(text, client)
         results.append(label)
 
-        # Update Progress Bar
         progress_bar.progress((i + 1) / total, text=f"LLaMA-Analyse: {i + 1}/{total}")
 
-        time.sleep(1)  # Rate-Limit
+        time.sleep(1)
         if (i + 1) % 20 == 0:
             print("Warte 30 Sekunden nach 20 Anfragen...")
             time.sleep(30)
 
-    progress_bar.empty()  # Entfernt die Bar nach Abschluss
+    progress_bar.empty()
     df['LLaMA_Kategorie'] = results
     print("LLaMA-Analyse abgeschlossen.")
     return df
@@ -252,7 +226,6 @@ def run_llama_classification(df: pd.DataFrame, text_column: str) -> pd.DataFrame
 # =======================================================================
 
 def lemmatize_text(text: str, nlp_model) -> str:
-    """Lemmatisiert einen Text mit dem (übergebenen) Spacy-Modell."""
     if not isinstance(text, str): return ""
 
     doc = nlp_model(text.lower())
@@ -265,7 +238,6 @@ def lemmatize_text(text: str, nlp_model) -> str:
 
 
 def count_aspect_sentiment(lemmatized_text: str, aspect_words: dict) -> dict:
-    # (Keine Änderung hier)
     score = {"pos": 0, "neg": 0}
     for label in ["pos", "neg"]:
         for word in aspect_words[label]:
@@ -275,7 +247,6 @@ def count_aspect_sentiment(lemmatized_text: str, aspect_words: dict) -> dict:
 
 
 def run_aspect_analysis(df: pd.DataFrame, text_column: str) -> pd.DataFrame:
-    # HOLT DAS MODELL AUS DEM CACHE
     nlp = get_spacy_model()
     if nlp is None:
         st.error("Spacy-Modell konnte nicht geladen werden. Überspringe...")
