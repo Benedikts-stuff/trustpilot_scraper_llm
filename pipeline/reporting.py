@@ -117,11 +117,10 @@ def plot_aspect_heatmap(df):
     return fig
 
 
-
 def plot_correlation_heatmap(df):
     cols_to_corr = []
-
     df_calc = df.copy()
+
     if 'Body' in df_calc.columns:
         df_calc['Text_Length'] = df_calc['Body'].astype(str).str.len()
         cols_to_corr.append('Text_Length')
@@ -130,13 +129,30 @@ def plot_correlation_heatmap(df):
     if 'BERT_Score' in df_calc.columns: cols_to_corr.append('BERT_Score')
     if 'Wortliste_Score' in df_calc.columns: cols_to_corr.append('Wortliste_Score')
 
+    if 'LLaMA_Kategorie' in df_calc.columns:
+        llama_map = {
+            "positiv": 1,
+            "positive": 1,
+            "neutral": 0,
+            "verbesserungsvorschlag": 0,
+            "negativ": -1,
+            "negative": -1
+        }
+
+        df_calc['LLaMA_Score'] = df_calc['LLaMA_Kategorie'].astype(str).str.lower().map(llama_map)
+
+        if df_calc['LLaMA_Score'].notna().any():
+            cols_to_corr.append('LLaMA_Score')
+
     if len(cols_to_corr) < 2: return None
 
+    # Korrelation berechnen
     corr = df_calc[cols_to_corr].corr()
 
-    fig, ax = plt.subplots(figsize=(6, 5))
+
+    fig, ax = plt.subplots(figsize=(8, 6))
     sns.heatmap(corr, annot=True, cmap="coolwarm", vmin=-1, vmax=1, ax=ax)
-    ax.set_title("Korrelation (Zusammenhänge)")
+    ax.set_title("Korrelation")
     return fig
 
 
