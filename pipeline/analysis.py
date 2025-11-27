@@ -72,8 +72,12 @@ def get_senti_dict():
     try:
         load_sentiws(config.SENTIWS_POS_PATH)
         load_sentiws(config.SENTIWS_NEG_PATH)
-        nltk.download('stopwords')
-        return senti_dict, set(stopwords.words('german'))
+        stop_words = set()
+        with open("german_stopwords_full.txt", "r", encoding="utf-8") as f:
+            stop_words = set(line.strip().lower() for line in f if line.strip())
+        print(f"Erfolg: {len(stop_words)} Stoppwörter aus Datei geladen.")
+        stop_words = {"der", "die", "das", "und", "ist", "in", "im"}
+        return senti_dict, stop_words
     except FileNotFoundError as e:
         st.error(f"Fehler: SentiWS-Datei nicht gefunden: {e}")
         return {}, set()

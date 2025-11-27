@@ -39,14 +39,15 @@ st.markdown("""
         </style>
         """, unsafe_allow_html=True)
 
-st.title("Review & Sentiment Peer Analysis")
-st.markdown("Vergleiche Arbeitgeber-Bewertungen und Stimmungen.")
+st.title("Sentiment Dashboard")
+st.markdown("Zur extraktion und Analyse von Daten aus den Bewertungsportalen Kununu und Trustpilot.")
 
 if "sources_db" not in st.session_state:
     st.session_state.sources_db = [
-        {"name": "Beispiel Trustpilot", "url": "https://www.trustpilot.com/review/www.sap.com",
+        {"name": "SAP Trustpilot", "url": "https://www.trustpilot.com/review/www.sap.com",
          "type": "Trustpilot (Kommentare)"},
-        {"name": "Beispiel Kununu", "url": "https://www.kununu.com/de/telekom", "type": "Kununu (Kommentare)"}
+        {"name": "SAP", "url": "https://www.kununu.com/de/sap/kommentare", "type": "Kununu (Kommentare)"},
+        {"name": "Bosch", "url": "https://www.kununu.com/de/bosch-gruppe/kommentare", "type": "Kununu (Kommentare)"}
     ]
 
 if "analysis_results" not in st.session_state:
@@ -197,7 +198,7 @@ def make_location_chart(df):
     return chart
 
 
-tab_setup, tab_dashboard = st.tabs(["🛠️ Setup & Daten", "📈 Analyse-Dashboard"])
+tab_setup, tab_dashboard = st.tabs(["Setup & Daten", "Dashboard"])
 
 # ==============================================================================
 # TAB 1: SETUP
@@ -207,7 +208,7 @@ with tab_setup:
 
     with c1:
         st.subheader("1. Quellen")
-        with st.expander("➕ Neue Quelle / Upload", expanded=True):
+        with st.expander("➕ Neue Quelle", expanded=True):
             st.markdown("**URL hinzufügen**")
             new_name = st.text_input("Name", placeholder="Firma XY")
             new_type = st.selectbox("Typ", ["Trustpilot (Kommentare)", "Kununu (Kommentare)", "Kununu (Gehälter)"])
@@ -215,7 +216,7 @@ with tab_setup:
             if st.button("Speichern"):
                 if new_name and new_url:
                     st.session_state.sources_db.append({"name": new_name, "url": new_url, "type": new_type})
-                    st.session_state.selected_view_sources.append(new_name)
+                    st.session_state.selected_view_sources.append(new_name + " " + new_type)
                     st.success("Gespeichert!")
                     st.rerun()
 
@@ -234,32 +235,29 @@ with tab_setup:
                     st.success("Datei geladen!")
                     st.rerun()
 
-        st.write("**Verfügbare Quellen:**")
-        for s in st.session_state.sources_db:
-            st.caption(f"• {s['name']} ({s['type']})")
-
     with c2:
         st.subheader("2. Parameter & Start")
 
-        all_sources = [s["name"] for s in st.session_state.sources_db]
+        all_sources = [(s["name"] + " " + s["type"]) for s in st.session_state.sources_db]
+
         default_sel = st.session_state.selected_view_sources if st.session_state.selected_view_sources else None
 
-        sources_to_scrape = st.multiselect("Quellen aktualisieren:", all_sources, default=default_sel)
+        sources_to_scrape = st.multiselect("Quellen auswählen", all_sources, default=default_sel)
 
         cp1, cp2 = st.columns(2)
         max_pages = cp1.number_input("Max. Seiten", 1, 50, 3)
         limit_analysis = cp2.number_input("Analyse Tiefe", 10, 500, 50)
 
-        st.markdown("**KI-Modelle:**")
+        st.markdown("**Analyse-Modelle:**")
         cm1, cm2, cm3, cm4 = st.columns(4)
-        use_sentiws = cm1.checkbox("Wortliste", True)
+        use_sentiws = cm1.checkbox("Wortliste (klassisch)", True)
         use_bert = cm2.checkbox("BERT", True)
         use_spacy = cm3.checkbox("Spacy", False)
         use_llama = cm4.checkbox("LLaMA", False)
 
         st.divider()
 
-        if st.button("🚀 Start: Daten holen & Analysieren", type="primary", use_container_width=True):
+        if st.button("Start: Daten extrahieren & Analysieren", type="primary", use_container_width=True):
             if not sources_to_scrape:
                 st.error("Bitte wähle mindestens eine Quelle aus.")
             else:
@@ -270,7 +268,7 @@ with tab_setup:
                 total = len(sources_to_scrape)
                 for i, s_name in enumerate(sources_to_scrape):
                     status.write(f"Bearbeite: **{s_name}**...")
-                    cfg = next(s for s in st.session_state.sources_db if s["name"] == s_name)
+                    cfg = next(s for s in st.session_state.sources_db if (s["name"] + " " + s["type"])== s_name)
                     df = pd.DataFrame()
 
                     try:
@@ -329,7 +327,7 @@ with tab_setup:
                 st.rerun()
 
     st.write("---")
-    st.subheader("📋 Daten-Vorschau")
+    st.subheader("Daten-Vorschau")
     if st.session_state.analysis_results:
         tabs = st.tabs(list(st.session_state.analysis_results.keys()))
         for t, (n, d) in zip(tabs, st.session_state.analysis_results.items()):
@@ -356,8 +354,7 @@ with tab_dashboard:
         st.divider()
 
         metric_choice = st.radio("Metrik:", ["BERT (Sentiment)", "Wortliste (SentiWS)", "LLaMA (Klassifizierung)",
-                                             "Sterne Bewertung"])
-        st.caption("BERT/Wortliste: -1 bis +1.")
+                                             "Sterne Bewertung", "Gehalt (Durchschnitt)"])
 
         st.divider()
         time_interval = st.select_slider("Zeit-Intervall (Glättung):", options=["Tag", "Woche", "Monat"], value="Woche")
@@ -366,7 +363,10 @@ with tab_dashboard:
         st.warning("Bitte Firmen auswählen.")
         st.stop()
 
+    is_salary_mode = "Gehalt" in metric_choice
+
     combined_df = pd.DataFrame()
+    salary_combined = pd.DataFrame()
     raw_data_map = {}
 
     resample_map = {"Tag": "D", "Woche": "W", "Monat": "M"}
@@ -375,23 +375,33 @@ with tab_dashboard:
     for t in tickers:
         raw = st.session_state.analysis_results.get(t)
         if raw is not None:
-            ts = prepare_time_series(raw, metric_choice)
-            if ts is not None:
-                ts["Source"] = t
-                if "Body" in raw.columns:
-                    ts["Length"] = raw["Body"].astype(str).str.len()
-                else:
-                    ts["Length"] = 0
+            if is_salary_mode:
+                if "Salary" in raw.columns and "Position" in raw.columns:
+                    df_sal = raw.copy()
+                    df_sal["Firma"] = t
+                    if salary_combined.empty:
+                        salary_combined = df_sal
+                    else:
+                        salary_combined = pd.concat([salary_combined, df_sal], ignore_index=True)
 
-                if "raw" not in raw_data_map: raw_data_map["raw"] = []
-                raw_data_map["raw"].append(ts)
+            else:
+                ts = prepare_time_series(raw, metric_choice)
+                if ts is not None:
+                    ts["Source"] = t
+                    if "Body" in raw.columns:
+                        ts["Length"] = raw["Body"].astype(str).str.len()
+                    else:
+                        ts["Length"] = 0
 
-                ts_agg = ts.set_index("Date")[["Value"]].resample(resample_code).mean().rename(columns={"Value": t})
+                    if "raw" not in raw_data_map: raw_data_map["raw"] = []
+                    raw_data_map["raw"].append(ts)
 
-                if combined_df.empty:
-                    combined_df = ts_agg
-                else:
-                    combined_df = combined_df.join(ts_agg, how="outer")
+                    ts_agg = ts.set_index("Date")[["Value"]].resample(resample_code).mean().rename(columns={"Value": t})
+
+                    if combined_df.empty:
+                        combined_df = ts_agg
+                    else:
+                        combined_df = combined_df.join(ts_agg, how="outer")
 
     combined_smoothed = pd.DataFrame()
     if not combined_df.empty:
@@ -400,116 +410,164 @@ with tab_dashboard:
         combined_smoothed = combined_df.rolling(window=window, min_periods=1).mean()
 
     with cols[0].container(border=True):
-        st.write("#### Trend (Aktuell)")
-        if not combined_smoothed.empty:
-            last = combined_smoothed.last_valid_index()
-            if last:
-                curr = combined_smoothed.loc[last]
-                c1, c2 = st.columns(2)
-                if not pd.isna(curr.max()):
-                    c1.metric("Top", curr.idxmax(), f"{curr.max():.2f}")
-                    c2.metric("Low", curr.idxmin(), f"{curr.min():.2f}", delta_color="inverse")
+        st.write("#### Trend / Übersicht")
+
+        if is_salary_mode:
+            if not salary_combined.empty:
+                avg_sal = salary_combined["Salary"].mean()
+                max_sal = salary_combined["Salary"].max()
+                st.metric("Ø Gehalt (Alle)", f"{avg_sal:,.0f} €")
+                st.metric("Max. Gehalt", f"{max_sal:,.0f} €")
             else:
-                st.caption("Keine aktuellen Daten.")
+                st.caption("Keine Gehaltsdaten gefunden.")
         else:
-            st.caption("Keine Zeitreihe.")
+            # Bestehende Logik für Sentiment
+            if not combined_smoothed.empty:
+                last = combined_smoothed.last_valid_index()
+                if last:
+                    curr = combined_smoothed.loc[last]
+                    c1, c2 = st.columns(2)
+                    if not pd.isna(curr.max()):
+                        c1.metric("Top", curr.idxmax(), f"{curr.max():.2f}")
+                        c2.metric("Low", curr.idxmin(), f"{curr.min():.2f}", delta_color="inverse")
+                else:
+                    st.caption("Keine aktuellen Daten.")
+            else:
+                st.caption("Keine Zeitreihe.")
 
     with cols[1].container(border=True):
-        if not combined_smoothed.empty:
-            long_df = combined_smoothed.reset_index().melt('Date', var_name='Firma', value_name='Score')
-            t_title = f"Sentiment-Verlauf ({time_interval}sdurchschnitt)"
-            chart = alt.Chart(long_df).mark_line(point=True).encode(
-                x=alt.X("Date:T", title="Zeit"),
-                y=alt.Y("Score:Q", title=f"Score ({metric_choice})", scale=alt.Scale(zero=False)),
-                color=alt.Color("Firma:N", legend=alt.Legend(orient="bottom")),
-                tooltip=["Date", "Firma", alt.Tooltip("Score", format=".2f")]
-            ).properties(title=t_title, height=450).interactive()
-            st.altair_chart(chart, use_container_width=True)
+
+        # 1. FALL: GEHALTS-DARSTELLUNG
+        if is_salary_mode:
+            if not salary_combined.empty:
+                st.subheader("Gehaltsvergleich nach Position")
+
+                # 1. Berechne die tatsächliche Höhe, die das Chart braucht
+                #    z.B. 40 Pixel pro Balken. Bei 50 Positionen sind das 2000 Pixel.
+                num_positions = salary_combined["Position"].nunique()
+                row_height = 40
+                real_chart_height = max(500, num_positions * row_height + 80)
+
+                # 2. Erstelle das "riesige" Chart
+                chart = alt.Chart(salary_combined).mark_bar().encode(
+                    x=alt.X("Salary:Q", title="Jahresgehalt (€)"),
+                    y=alt.Y("Position:N", sort="-x", title="Position"),  # Sortiert nach Gehalt
+                    color=alt.Color("Firma:N", legend=alt.Legend(orient="bottom")),
+                    tooltip=[
+                        "Firma",
+                        "Position",
+                        alt.Tooltip("Salary", format=",.0f", title="Gehalt"),
+                        alt.Tooltip("Gehaltsangaben", title="Anzahl Datensätze")
+                    ]
+                ).properties(
+                    # WICHTIG: Hier die berechnete volle Höhe eintragen
+                    height=real_chart_height,
+                    title="Durchschnittsgehälter pro Position"
+                ).interactive()
+
+                st.altair_chart(chart, use_container_width=True)
+            else:
+                st.warning("Für die ausgewählten Firmen liegen keine Gehaltsdaten vor (Format: Position, Salary).")
+
         else:
-            st.info(f"Für die gewählte Metrik '{metric_choice}' sind keine Zeitdaten verfügbar.")
+            if not combined_smoothed.empty:
+                long_df = combined_smoothed.reset_index().melt('Date', var_name='Firma', value_name='Score')
+                t_title = f"Sentiment-Verlauf ({time_interval}sdurchschnitt)"
+                chart = alt.Chart(long_df).mark_line(point=True).encode(
+                    x=alt.X("Date:T", title="Zeit"),
+                    y=alt.Y("Score:Q", title=f"Score ({metric_choice})", scale=alt.Scale(zero=False)),
+                    color=alt.Color("Firma:N", legend=alt.Legend(orient="bottom")),
+                    tooltip=["Date", "Firma", alt.Tooltip("Score", format=".2f")]
+                ).properties(title=t_title, height=450).interactive()
+                st.altair_chart(chart, use_container_width=True)
+            else:
+                st.info(f"Für die gewählte Metrik '{metric_choice}' sind keine Zeitdaten verfügbar.")
 
-    st.write("---")
-    st.subheader("🔍 Advanced Insights")
 
-    if "raw" in raw_data_map:
-        full_raw = pd.concat(raw_data_map["raw"])
-        ac1, ac2 = st.columns(2)
 
-        with ac1.container(border=True):
-            st.markdown("**Volatilität (Streuung)**")
-            base = alt.Chart(full_raw)
-            box = base.mark_boxplot(extent='min-max', size=30).encode(
-                x=alt.X("Source:N", title=None, axis=alt.Axis(labelAngle=-45)),
-                y=alt.Y("Value:Q", title=metric_choice),
-                color="Source:N"
-            )
-            points = base.mark_circle(size=15, opacity=0.3).encode(
-                x=alt.X("Source:N"),
-                y=alt.Y("Value:Q"),
-                color="Source:N",
-                xOffset="jitter:Q",
-                tooltip=["Date", "Value"]
-            ).transform_calculate(jitter="random()")
-            st.altair_chart(box + points, use_container_width=True)
+    if not is_salary_mode:
+        st.write("---")
+        st.subheader("Advanced Insights")
 
-        with ac2.container(border=True):
-            st.markdown("**Länge vs. Bewertung**")
-            scat = alt.Chart(full_raw).mark_circle(size=50, opacity=0.6).encode(
-                x=alt.X("Length:Q", title="Zeichenlänge"),
-                y=alt.Y("Value:Q", title=metric_choice),
-                color="Source:N",
-                tooltip=["Source", "Length", "Value"]
-            ).properties(height=350).interactive()
-            st.altair_chart(scat, use_container_width=True)
+        if "raw" in raw_data_map:
+            full_raw = pd.concat(raw_data_map["raw"])
+            ac1, ac2 = st.columns(2)
 
-    st.write("---")
-    st.subheader("🔎 Tiefenanalyse")
+            with ac1.container(border=True):
+                st.markdown("**Volatilität (Streuung)**")
+                base = alt.Chart(full_raw)
+                box = base.mark_boxplot(extent='min-max', size=30).encode(
+                    x=alt.X("Source:N", title=None, axis=alt.Axis(labelAngle=-45)),
+                    y=alt.Y("Value:Q", title=metric_choice),
+                    color="Source:N"
+                )
+                points = base.mark_circle(size=15, opacity=0.3).encode(
+                    x=alt.X("Source:N"),
+                    y=alt.Y("Value:Q"),
+                    color="Source:N",
+                    xOffset="jitter:Q",
+                    tooltip=["Date", "Value"]
+                ).transform_calculate(jitter="random()")
+                st.altair_chart(box + points, use_container_width=True)
 
-    if tickers:
-        g_cols = st.columns(2)
-        for i, t in enumerate(tickers):
-            df = st.session_state.analysis_results.get(t)
-            if df is None: continue
+            with ac2.container(border=True):
+                st.markdown("**Länge vs. Bewertung**")
+                scat = alt.Chart(full_raw).mark_circle(size=50, opacity=0.6).encode(
+                    x=alt.X("Length:Q", title="Zeichenlänge"),
+                    y=alt.Y("Value:Q", title=metric_choice),
+                    color="Source:N",
+                    tooltip=["Source", "Length", "Value"]
+                ).properties(height=350).interactive()
+                st.altair_chart(scat, use_container_width=True)
 
-            with g_cols[i % 2].container(border=True):
-                st.markdown(f"### {t}")
-                t1, t2, t3, t4 = st.tabs(["📊 Verteilung", "☁️ Wordcloud", "📍 Korrelation", "🌍 Herkunft"])
+        st.write("---")
+        st.subheader("Tiefenanalyse")
 
-                with t1:
-                    chart = None
-                    if "LLaMA" in metric_choice and "LLaMA_Kategorie" in df.columns:
-                        chart = make_distribution_chart(df, "LLaMA_Kategorie", "LLaMA Klassifizierung", "viridis")
-                    elif "BERT" in metric_choice and "BERT_Sentiment" in df.columns:
-                        chart = make_distribution_chart(df, "BERT_Sentiment", "BERT Sentiment", "viridis")
-                    elif "Sterne" in metric_choice:
-                        chart = make_star_chart(df)
-                    elif "Wortliste" in metric_choice and "Wortliste_Sentiment" in df.columns:
-                        chart = make_distribution_chart(df, "Wortliste_Sentiment", "SentiWS", "tealblues")
+        if tickers:
+            g_cols = st.columns(2)
+            for i, t in enumerate(tickers):
+                df = st.session_state.analysis_results.get(t)
+                if df is None: continue
 
-                    if chart:
-                        st.altair_chart(chart, use_container_width=True)
-                    elif "Salary" in df.columns:
-                        st.info("Gehaltsdaten - keine Sentiment-Verteilung.")
-                    else:
-                        st.caption("Keine passenden Daten für die gewählte Metrik.")
+                with g_cols[i % 2].container(border=True):
+                    st.markdown(f"### {t}")
+                    t1, t2, t3, t4 = st.tabs(["Verteilung", "Wordcloud", "Korrelation", "Herkunft"])
 
-                with t2:
-                    if "Body" in df.columns:
-                        fig = reporting.create_wordcloud(df['Body'], f"Wordcloud: {t}")
-                        if fig: st.pyplot(fig)
-                    else:
-                        st.info("Kein Text.")
+                    with t1:
+                        chart = None
+                        if "LLaMA" in metric_choice and "LLaMA_Kategorie" in df.columns:
+                            chart = make_distribution_chart(df, "LLaMA_Kategorie", "LLaMA Klassifizierung", "viridis")
+                        elif "BERT" in metric_choice and "BERT_Sentiment" in df.columns:
+                            chart = make_distribution_chart(df, "BERT_Sentiment", "BERT Sentiment", "viridis")
+                        elif "Sterne" in metric_choice:
+                            chart = make_star_chart(df)
+                        elif "Wortliste" in metric_choice and "Wortliste_Sentiment" in df.columns:
+                            chart = make_distribution_chart(df, "Wortliste_Sentiment", "SentiWS", "tealblues")
 
-                with t3:
-                    fig_c = reporting.plot_correlation_heatmap(df)
-                    if fig_c:
-                        st.pyplot(fig_c)
-                    else:
-                        st.info("Zu wenig Daten für Korrelation.")
+                        if chart:
+                            st.altair_chart(chart, use_container_width=True)
+                        elif "Salary" in df.columns:
+                            st.info("Gehaltsdaten - keine Sentiment-Verteilung.")
+                        else:
+                            st.caption("Keine passenden Daten für die gewählte Metrik.")
 
-                with t4:
-                    chart_loc = make_location_chart(df)
-                    if chart_loc:
-                        st.altair_chart(chart_loc, use_container_width=True)
-                    else:
-                        st.info("Keine Standortdaten verfügbar.")
+                    with t2:
+                        if "Body" in df.columns:
+                            fig = reporting.create_wordcloud(df['Body'], f"Wordcloud: {t}")
+                            if fig: st.pyplot(fig)
+                        else:
+                            st.info("Kein Text.")
+
+                    with t3:
+                        fig_c = reporting.plot_correlation_heatmap(df)
+                        if fig_c:
+                            st.pyplot(fig_c)
+                        else:
+                            st.info("Zu wenig Daten für Korrelation.")
+
+                    with t4:
+                        chart_loc = make_location_chart(df)
+                        if chart_loc:
+                            st.altair_chart(chart_loc, use_container_width=True)
+                        else:
+                            st.info("Keine Standortdaten verfügbar.")

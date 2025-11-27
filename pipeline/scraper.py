@@ -194,6 +194,42 @@ def _expand_all_reviews(driver, max_pages_to_click: int):
             continue
 
 
+def _expand_all_jobs(driver, max_pages_to_click: int):
+    """Klickt 'MEHR JOBTITEL ANZEIGEN' basierend auf Textinhalt statt Hash-Klassen."""
+    clicks = 0
+    wait = WebDriverWait(driver, 5)  # Kurzer Wait reicht oft
+
+    xpath_selector = "//button[descendant::span[contains(text(), 'MEHR JOBTITEL ANZEIGEN')]]"
+
+    while clicks < max_pages_to_click:
+        try:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(1)
+
+            btn = wait.until(EC.presence_of_element_located((By.XPATH, xpath_selector)))
+
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", btn)
+            time.sleep(1)
+
+            btn_clickable = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_selector)))
+
+            try:
+                btn_clickable.click()
+            except Exception:
+                driver.execute_script("arguments[0].click();", btn_clickable)
+
+            print(f"Kununu 'Mehr Jobs' geklickt ({clicks + 1}/{max_pages_to_click})")
+            clicks += 1
+
+            time.sleep(random.uniform(2.5, 4.0))
+
+        except (TimeoutException, StaleElementReferenceException):
+            print("Kein 'Mehr anzeigen'-Button mehr gefunden oder Ende erreicht.")
+            break
+        except Exception as e:
+            print(f"Fehler im Loop: {e}")
+            break
+
 def _parse_review_cards(driver):
     """Parst alle geladenen Review-Karten (Logik aus test.py)."""
     reviews = []
@@ -289,30 +325,10 @@ def scrape_kununu_salary(url: str, max_pages_to_click: int = 50):
     _hide_consent_banner(driver)
     time.sleep(2)
 
-    wait = WebDriverWait(driver, 10)
-    clicks = 0
-    try:
-        while clicks < max_pages_to_click:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)
-
-            try:
-                button = wait.until(
-                    EC.element_to_be_clickable((By.XPATH, "//button[.//span[text()='MEHR JOBTITEL ANZEIGEN']]")))
-                driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", button)
-                time.sleep(1.5)
-                button.click()
-                print(f"➡️ Gehalts-Button geklickt ({clicks + 1}/{max_pages_to_click})")
-                time.sleep(random.randint(4, 6))
-                clicks += 1
-            except Exception:
-                print("✅ Kein Gehalts-Button mehr sichtbar – fertig.")
-                break
-    except Exception as e:
-        print(f"❌ Fehler im Gehalts-Ablauf: {e}")
+    WebDriverWait(driver, 10)
+    _expand_all_jobs(driver,max_pages_to_click)
 
     soup = BeautifulSoup(driver.page_source, "html.parser")
-    driver.quit()
 
     salaries = []
     for card in soup.select("a.index__link__zTGAc"):
@@ -338,5 +354,6 @@ def scrape_kununu_salary(url: str, max_pages_to_click: int = 50):
             "Gehaltsangaben": sample_size
         })
 
+    driver.quit()
     print(f"Kununu-Gehälter-Scraping beendet. {len(salaries)} Positionen gefunden.")
     return salaries

@@ -2,24 +2,26 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from wordcloud import WordCloud
-
 sns.set_theme(style="whitegrid")
 
 
 def create_wordcloud(text_series, title):
     """Erstellt eine Wordcloud aus einer Pandas-Textserie."""
-    from nltk.corpus import stopwords
-    import nltk
+    stop_words = set()
     try:
-        stop_words = set(stopwords.words('german'))
-    except:
-        nltk.download('stopwords')
-        stop_words = set(stopwords.words('german'))
+        with open("german_stopwords_full.txt", "r", encoding="utf-8") as f:
+            stop_words = set(word.strip().lower() for word in f if word.strip())
+    except FileNotFoundError:
+        print("Warnung: Stopwords-Datei nicht gefunden")
 
-    try:
-        stop_words.update(set(stopwords.words('english')))
-    except:
-        pass
+    custom_ignore = [
+        "pros", "cons", "suggestions", "verbesserungsvorschlag", "verbesserungsvorschläge",
+        "gut", "schlecht", "arbeitgeber",  # Taucht in den Kununu-Headern oft auf
+        "nan", "none", "null",  # Leere Felder aus Excel/Pandas
+        "bewertung", "kommentar", "categories"
+    ]
+
+    stop_words.update(custom_ignore)
 
     text_data = text_series.dropna().astype(str)
     if text_data.empty: return None
@@ -28,7 +30,7 @@ def create_wordcloud(text_series, title):
 
     filtered_words = " ".join([
         word for word in full_text.split()
-        if word.lower() not in stop_words and len(word) > 2
+        if (word.replace(":", "")).lower() not in stop_words and len(word) > 2
     ])
 
     if not filtered_words:
@@ -140,4 +142,33 @@ def plot_correlation_heatmap(df):
     fig, ax = plt.subplots(figsize=(6, 5))
     sns.heatmap(corr, annot=True, cmap="coolwarm", vmin=-1, vmax=1, ax=ax)
     ax.set_title("Korrelation (Zusammenhänge)")
+    return fig
+
+
+def plot_correlation_heatmap_salary(df):
+    """Erstellt eine Heatmap der Korrelationen zwischen numerischen Spalten."""
+    # Nur numerische Spalten nehmen
+    numeric_df = df.select_dtypes(include=['number'])
+
+    # Unnötige Spalten rauswerfen (z.B. Indizes oder IDs falls vorhanden)
+    numeric_df = numeric_df.loc[:, ~numeric_df.columns.str.contains('^Unnamed')]
+
+    if numeric_df.shape[1] < 2: return None  # Braucht mind. 2 Spalten
+
+    corr = numeric_df.corr()
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    # Dark Mode Anpassung
+    fig.patch.set_facecolor('#0e1117')
+    ax.set_facecolor('#0e1117')
+
+    sns.heatmap(corr, annot=True, cmap='coolwarm', fmt=".2f", ax=ax,
+                cbar_kws={"shrink": .8})
+
+    # Textfarben für Dark Mode
+    ax.tick_params(colors='white', which='both')
+    cbar = ax.collections[0].colorbar
+    cbar.ax.tick_params(colors='white')
+
+    ax.set_title("Korrelationen", color='white')
     return fig
