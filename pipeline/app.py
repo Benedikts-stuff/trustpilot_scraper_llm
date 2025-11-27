@@ -250,7 +250,6 @@ with tab_setup:
         cm1, cm2, cm3, cm4 = st.columns(4)
         use_sentiws = cm1.checkbox("Wortliste (klassisch)", True)
         use_bert = cm2.checkbox("BERT", True)
-        use_spacy = cm3.checkbox("Spacy", False)
         use_llama = cm4.checkbox("LLaMA", False)
 
         st.divider()
@@ -308,8 +307,6 @@ with tab_setup:
                             df_sub = analysis.run_bert_sentiment(df_sub, col)
                         if use_llama and "LLaMA_Kategorie" not in df_sub.columns:
                             df_sub = analysis.run_llama_classification(df_sub, col)
-                        if use_spacy and "lemmatized" not in df_sub.columns:
-                            df_sub = analysis.run_aspect_analysis(df_sub, col)
 
                         results_buffer[s_name] = df_sub
                     elif not df.empty:
