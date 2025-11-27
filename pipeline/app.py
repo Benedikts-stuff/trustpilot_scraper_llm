@@ -247,10 +247,10 @@ with tab_setup:
         limit_analysis = cp2.number_input("Analyse Tiefe", 10, 500, 50)
 
         st.markdown("**Analyse-Modelle:**")
-        cm1, cm2, cm3, cm4 = st.columns(4)
+        cm1, cm2, cm3  = st.columns(3)
         use_sentiws = cm1.checkbox("Wortliste (klassisch)", True)
         use_bert = cm2.checkbox("BERT", True)
-        use_llama = cm4.checkbox("LLaMA", False)
+        use_llama = cm3.checkbox("LLaMA", False)
 
         st.divider()
 
