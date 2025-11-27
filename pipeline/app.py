@@ -461,7 +461,7 @@ with tab_dashboard:
         else:
             if not combined_smoothed.empty:
                 long_df = combined_smoothed.reset_index().melt('Date', var_name='Firma', value_name='Score')
-                t_title = f"Sentiment-Verlauf ({time_interval}sdurchschnitt)"
+                t_title = f"Sentiment-Verlauf (durchschnitt pro {time_interval})"
                 chart = alt.Chart(long_df).mark_line(point=True).encode(
                     x=alt.X("Date:T", title="Zeit"),
                     y=alt.Y("Score:Q", title=f"Score ({metric_choice})", scale=alt.Scale(zero=False)),
