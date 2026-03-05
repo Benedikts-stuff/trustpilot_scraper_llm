@@ -6,7 +6,9 @@ Um das Tool zu starten, musst du nur eine einzige Datei doppelklicken.
 
 ANLEITUNG:
 1.  Stelle sicher, dass dieser ganze Ordner entpackt ist (nicht mehr in der ZIP-Datei).
-2.  Doppelklicke die Datei: 'start_tool.bat'
+2.  Falls Chrome nicht installiert ist, installiere es.
+3.  Ersetze den Chrome driver (chromedriver) in diesem Ordner mit dem chrome driver der genau zu deiner installierten chrome Version passt.
+4.  Doppelklicke die Datei: 'start_tool.bat'
 
 WAS PASSIERT DANN?
 - Ein schwarzes Konsolen-Fenster oeffnet sich.
