@@ -2,6 +2,10 @@
 :: Wechsle in das Verzeichnis, in dem diese .bat-Datei liegt
 cd /D %~dp0
 
+:: Only windows, else delete
+SET "PYTHON_DIR=C:\Users\beng\AppData\Local\Programs\Python\Python312"
+SET "PATH=%PYTHON_DIR%;%PYTHON_DIR%\Scripts;%PATH%"
+
 ECHO ========================================================
 ECHO          Review Analyse Tool - Starter
 ECHO ========================================================
