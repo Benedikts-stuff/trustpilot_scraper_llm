@@ -11,7 +11,9 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
+from webdriver_manager.chrome import ChromeDriverManager
 
 import platform
 import os
@@ -81,43 +83,27 @@ def scrape_trustpilot_reviews(base_url: str, max_pages: int = 1000):
 # ==============================================================
 
 def _setup_selenium_driver():
-    print("Initialisiere Selenium WebDriver...")
-    opts = webdriver.ChromeOptions()
-    # opts.add_argument("--headless")
+    print("Initialisiere Selenium WebDriver (Auto-Modus)...")
+
+    opts = Options()
     opts.add_argument("--lang=de-DE")
     opts.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
+    chrome_user_path = os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe")
+    if os.path.exists(chrome_user_path):
+        opts.binary_location = chrome_user_path
+
     try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
+        service = Service(ChromeDriverManager().install())
 
-        local_driver_name = "chromedriver"
-        if platform.system() == "Windows":
-            local_driver_name = "chromedriver.exe"
-
-        local_driver_path = os.path.join(script_dir, local_driver_name)
-
-        print(f"Suche nach Treiber unter absolutem Pfad: {local_driver_path}")
-
-        if not os.path.exists(local_driver_path):
-            print("--- FATALER FEHLER ---")
-            print(f"Datei {local_driver_name} NICHT unter {local_driver_path} gefunden.")
-            print("Bitte stelle sicher, dass 'chromedriver' (Mac) oder 'chromedriver.exe' (Win)")
-            print("exakt im selben Ordner wie 'scraper.py' liegt.")
-            print("------------------------")
-            return None
-
-        service = Service(executable_path=local_driver_path)
         driver = webdriver.Chrome(service=service, options=opts)
-        print(f"WebDriver initialisiert (von lokaler Datei: {local_driver_path}).")
+        print("WebDriver erfolgreich initialisiert und Driver automatisch geladen.")
         return driver
 
     except Exception as e:
-        print(f"FEHLER: Konnte WebDriver nicht von '{local_driver_path}' starten. {e}")
-        print("Mögliche Gründe:")
-        print("1. Die 'chromedriver'-Datei ist beschädigt.")
-        print("2. Die 'chromedriver'-Version passt NICHT zu deiner installierten Chrome-Browser-Version.")
-        print("3. (Nur Mac) Du hast die 'xattr'- und 'chmod'-Befehle nicht ausgeführt.")
+        print(f"FEHLER beim automatischen WebDriver-Setup: {e}")
+        print("\nVersuche Chrome manuell zu finden...")
         return None
 
 
