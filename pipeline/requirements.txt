@@ -6,7 +6,7 @@ beautifulsoup4
 transformers
 torch
 groq
-spacy==3.7.4 
+https://github.com/explosion/spacy-models/releases/download/de_core_news_sm-3.7.0/de_core_news_sm-3.7.0.tar.gz
 nltk
 matplotlib
 wordcloud
@@ -15,4 +15,5 @@ python-dotenv==1.2.1
 
 
 selenium
+webdriver-manager
 altair
